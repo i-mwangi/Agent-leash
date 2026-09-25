@@ -4,7 +4,7 @@ export type Fetcher = typeof fetch;
 export interface MirrorKey { _type: string; key: string }
 export interface MirrorAccount { account:string; evm_address:string; deleted:boolean; key:MirrorKey; balance:{balance:number;tokens:{token_id:string;balance:number}[]} }
 export interface MirrorTransfer { token_id:string; account:string; amount:number|string }
-export interface MirrorTransaction { transaction_id:string; result:string; consensus_timestamp:string; token_transfers:MirrorTransfer[]; nonce?:number; name?:string }
+export interface MirrorTransaction { transaction_id:string; result:string; consensus_timestamp:string; token_transfers:MirrorTransfer[]; nonce?:number; name?:string; entity_id?:string }
 export function mirrorTxId(value: string) {
   if (/^0\.0\.\d+-\d+-\d{9}$/.test(value)) return value;
   const m = /^(0\.0\.\d+)@(\d+)\.(\d{1,9})$/.exec(value);

@@ -48,7 +48,7 @@ export async function nativeOperation(name:string,tx:Transaction,client:ReturnTy
   }
   await new Mirror().waitTransaction(txId);
   writeEvidence(name,txId);
-  console.log(`${name}: https://hashscan.io/testnet/transaction/${encodeURIComponent(txId)}`);
+  console.error(`${name}: https://hashscan.io/testnet/transaction/${encodeURIComponent(txId)}`);
   return result;
 }
 export function writeEvidence(action:string,txId:string) {

@@ -25,17 +25,21 @@ npm run agent -- register
 npm run agent -- status
 npm run agent -- pay-standing
 npm run agent -- quote 1000
+npm run agent -- quote-fallback 1000000
 npm run agent -- spend 1000
 npm run agent -- pause
 npm run agent -- unpause
 npm run agent -- revoke
+npm run agent -- pay-standing
 ```
 
 The CLI creates separate ignored `.env.agent`, `.env.guardian`, and `.env.server` files. Never commit keys or load spend keys in the server. Amounts are raw smallest units: testnet USDC `0.0.429274` has six decimals, so `1000` is 0.001 USDC. Setup is resumable; a successful transaction whose local result was interrupted requires manual reconciliation rather than a duplicate write.
 
 Start the testnet API in a separate terminal before `pay-standing`: PowerShell: `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`; Bash: `APP_MODE=testnet npm run dev -w @accountable/server`. The operator account must hold testnet USDC and the agent account must be associated with it.
 
-The spend command serializes requests, reserves the raw amount durably before submission, checks mirror-backed account/HCS/registry/policy/balance sources immediately before signing, and confirms the token debit before publishing a fill. Uncertain submissions stay reserved. Guardian `revoke` updates the account to a guardian-only key. It cannot undo prior spending.
+The spend command serializes requests, reserves the raw amount durably before submission, checks mirror-backed account/HCS/registry/policy/balance sources immediately before signing, and confirms the router call and token amounts before publishing a fill. Uncertain submissions stay reserved; a mirror-confirmed failed swap is recorded to HCS and released. Guardian `revoke` updates the account to a guardian-only key. It cannot undo prior spending. **Run revoke last:** the agent key cannot authorize further spends afterward.
+
+`npm run agent -- mcp` starts a local stdio MCP server with `link_account`, `check_policy`, and `record_outcome`. Run it in the repository directory with the isolated agent environment present. `link_account` verifies the account and stores a local ignored binding; `check_policy` is advisory; `record_outcome` checks mirror evidence before writing an HCS fill. The dashboard exposes live read-only identity, policy and fallback quote data in testnet mode. Demo switches and sample metrics remain labelled simulations.
 
 ## Real testnet evidence
 
@@ -50,6 +54,9 @@ These are **testnet writes** from one local deployment on 25 September 2026, sep
 | ERC-8004 agent `121` | [registration](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [card update](https://hashscan.io/testnet/transaction/0.0.5792828%401790349280.300460069) |
 | Token associations | [USDC](https://hashscan.io/testnet/transaction/0.0.10715883%401790349220.774920691), [WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790349224.140844625) |
 | x402 paid standing | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790350541.346608081), operator `0.0.5792828` → agent `0.0.10715883` |
+| Guardian pause/unpause | [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351849.434983179), [unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351875.376849531) |
+| Guardian revocation | [key update](https://hashscan.io/testnet/transaction/0.0.10715881%401790351896.589395734), [HCS rotated event](https://hashscan.io/testnet/transaction/0.0.10715881%401790351899.146336845) |
+| Standing after revocation | [second USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790351936.882024325); verified EIP-712 report returned `agentKeyActive: false` |
 
 `npm run agent -- status` reads and cross-checks the mirror account key, HCS publishers/events, registry owner/card, and guardian policy. These public IDs are examples, not fresh-scaffold defaults.
 
@@ -57,13 +64,13 @@ These are **testnet writes** from one local deployment on 25 September 2026, sep
 
 The API implements x402 v2 payment requirements, Blocky402 verification/settlement, independent mirror transfer confirmation, replay protection, and signed EIP-712 standing. With the local testnet server running (`APP_MODE=testnet`), `pay-standing` paid 0.001 USDC, checked the mirror debit/credit, and verified the signed report against the pinned attestation address and policy. The report expires after two minutes. Missing identity or settlement sources fail closed.
 
-The SaucerSwap V1 router `0.0.19264` exists on testnet, but there is no V1 or V2 USDC → WHBAR pool at the configured addresses. `getAmountsOut` reverts; `quote` and `spend` stop with `DEX_QUOTE_REVERTED`. **No swap has executed, and no successful read-only quote or forked-mainnet execution has been demonstrated.** A usable route or reproducible fallback is still required for the DEX part of the guide.
+The SaucerSwap V1 router `0.0.19264` exists on testnet, but there is no V1 or V2 USDC → WHBAR pool at the configured addresses. `getAmountsOut` reverts. Before revocation, `spend` stops with `DEX_QUOTE_REVERTED`; after revocation it stops earlier with `AGENT_KEY_INACTIVE`. **No swap has executed.** A reproducible **read-only** fallback is `npm run agent -- quote-fallback 1000000`: on 25 September 2026 the testnet V1 pair `0xfE7CC3cEb7b1128bfC3889184E2d5561BF74bfb3` quoted 1 SAUCE (six decimals) to 0.01809179 WHBAR (eight decimals). It checks token decimals and pool existence, calls the live router, and never signs or submits a transaction. This is quote evidence, not a fill. A forked-mainnet execution has not been demonstrated.
 
 The card's default standing endpoint is `localhost:3001`, for local development only. Set a reachable URL before registration for a public paid endpoint. The UI is synthetic and must not be presented as live standing.
 
 ## Validation
 
-`npm run check` runs lint, TypeScript, 32 deterministic unit/integration tests, one local Solidity execution test, and production builds. Tests do not require funded accounts. Live evidence above was checked separately with testnet receipts and mirror reads.
+`npm run check` runs lint, TypeScript, 34 deterministic unit/integration tests, one local Solidity execution test, and production builds. Tests do not require funded accounts. Live evidence above was checked separately with testnet receipts and mirror reads. A fresh public scaffold was installed and checked before the later MCP/dashboard changes; repeat that smoke test for the final revision.
 
 | Package | Role |
 | --- | --- |

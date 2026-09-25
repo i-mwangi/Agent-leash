@@ -9,6 +9,11 @@ import { Store } from '../packages/shared/src/store';
 import { Payments,type Facilitator } from '../packages/server/src/x402';
 import { signStanding,verifyStanding,STANDING_TYPES,type StandingMessage } from '../packages/shared/src/standing';
 import { proto } from '@hiero-ledger/proto';
+import { Client as McpClient } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { createAgentMcp } from '../packages/agent/src/mcp';
+import { fallbackQuote } from '../packages/shared/src/sources';
+import type { Deployment } from '../packages/shared/src/model';
 import golden from './fixtures/uaid.json';
 const testKey=(n:number)=>PrivateKey.fromStringECDSA(n.toString(16).padStart(64,'0'));
 describe('identity and signing',()=>{
@@ -34,6 +39,7 @@ describe('identity and signing',()=>{
     const wallet=new Wallet('0x'+'1'.padStart(64,'0'));
     const message:StandingMessage={publicId:'agent:1',hederaAccount:'0.0.123',erc8004AgentId:'1',uaid:golden.uaid,paused:false,agentKeyActive:true,maxPerTx:'10',maxPerDay:'100',hcsTopic:'0.0.456',hashscanAccount:'https://hashscan.io/testnet/account/0.0.123',issuedAt:1700000000,expiresAt:1700000120};
     const policy='0x'+'2'.padStart(40,'0'); const signed=await signStanding(message,policy,wallet);
+    expect(signed.signature).toBe('0x73f2a806f1319a2fae3ef98fa0f71ba4b4ff1de5b3055474831f0e635ead2fae2d9c2287b8246472966d3239e9070690eb1d3cf54519e3bc8b0210ca2ae46a261c');
     expect(STANDING_TYPES.Standing).toHaveLength(12);
     expect(verifyStanding(signed,wallet.address,policy,'0.0.123',1700000001)).toEqual(message);
     expect(()=>verifyStanding(signed,wallet.address,policy,'0.0.123',1700000120)).toThrow('EXPIRED');
@@ -79,5 +85,23 @@ describe('settlement and durable reservations',()=>{
     const encoded=tx.toBytes();expect(getBytes(encoded).length).toBeGreaterThan(0);
     await tx.signWith(testKey(1).publicKey,rawDigestSigner(testKey(1)));
     expect(tx.toBytes().length).toBeGreaterThan(encoded.length);
+  });
+});
+describe('agent tools and DEX fallback',()=>{
+  it('exposes the three guide tools over MCP without loading spend keys',async()=>{
+    const [clientTransport,serverTransport]=InMemoryTransport.createLinkedPair();
+    const server=createAgentMcp(),client=new McpClient({name:'test',version:'1'});
+    await server.connect(serverTransport);await client.connect(clientTransport);
+    expect((await client.listTools()).tools.map(t=>t.name).sort()).toEqual(['check_policy','link_account','record_outcome']);
+    await client.close();await server.close();
+  });
+  it('labels a verified pool quote read-only and rejects wrong token decimals',async()=>{
+    const d={routerId:'0.0.19264'} as Deployment;
+    const mirror={token:vi.fn(async(id:string)=>({deleted:false,decimals:id==='0.0.1183558'?'6':'8'})),call:vi.fn(async(_address:string,_abi:unknown,method:string)=>method==='getPair'?['0x'+'1'.repeat(40)]:[[1000000n,1809179n]])} as unknown as Mirror;
+    const result=await fallbackQuote(d,mirror,1000000n);
+    expect(result).toMatchObject({mode:'read-only',amountOut:'1809179',transactionSubmitted:false});
+    expect(mirror.call).toHaveBeenCalledTimes(2);
+    vi.mocked(mirror.token).mockResolvedValue({deleted:false,decimals:'3'} as never);
+    await expect(fallbackQuote(d,mirror,1000000n)).rejects.toThrow('FALLBACK_TOKEN_MISMATCH');
   });
 });

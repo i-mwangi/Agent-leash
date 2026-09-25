@@ -6,7 +6,7 @@ import { AppError, evmAddress } from '../../shared/src/model';
 import { Mirror, mirrorTxId } from '../../shared/src/mirror';
 import { Store } from '../../shared/src/store';
 import { policySnapshot, quote, ROUTER_ABI } from '../../shared/src/sources';
-import { guardedSign } from './policyClient';
+import { checkPolicy, guardedSign } from './policyClient';
 import { clientFor, nativeOperation, roleKey } from './runtime';
 import { publish } from './setup';
 
@@ -25,6 +25,8 @@ export async function spend(amount:bigint) {
     if(token.deleted || token.decimals!=='6') throw new AppError('SPEND_ASSET_INVALID');
     const router=evmAddress(d.routerId),account=evmAddress(d.agentAccount!);
     const read=()=>policySnapshot(d,mirror,confirmed=>store.outstanding(d.spendAsset,confirmed));
+    const initial=checkPolicy(await read(),d.spendAsset,amount);
+    if(!initial.ok) throw new AppError(initial.reason);
     // Quote first. A missing testnet pool is a read-only integration, never a synthetic fill.
     const estimate=await quote(d,mirror,amount);
     const allowance=BigInt((await mirror.call(evmAddress(d.spendAsset),TOKEN_ABI,'allowance',[account,router]))[0]);
@@ -43,10 +45,23 @@ export async function spend(amount:bigint) {
     // Pending amount survives a crash and counts against all future daily checks.
     const reservation=`swap-${Date.now()}`;
     return guardedSign(read,d.spendAsset,amount,async()=>{
-      const result=await nativeOperation(reservation,tx,client,store,[],false,id=>store.reserve(mirrorTxId(id),d.spendAsset,amount,new Date().toISOString().slice(0,10)));
+      let result;
+      try {result=await nativeOperation(reservation,tx,client,store,[],false,id=>store.reserve(mirrorTxId(id),d.spendAsset,amount,new Date().toISOString().slice(0,10)));}
+      catch(error){
+        const pending=store.operation(reservation);
+        if(pending){
+          const failed=await mirror.transaction(pending.tx_id).catch(()=>null);
+          if(failed && failed.result!=='SUCCESS') {
+            store.updateSpend(mirrorTxId(pending.tx_id),'failed',true);
+            await publish(d,'fill',{status:'failed',transactionId:pending.tx_id,amount:amount.toString(),asset:d.spendAsset,reason:failed.result},'agent',reservation+'-failed-hcs',store);
+          }
+        }
+        throw error;
+      }
       const confirmed=await mirror.waitTransaction(result.txId);
       const debit=confirmed.token_transfers.filter(t=>t.account===d.agentAccount && t.token_id===d.spendAsset).reduce((n,t)=>n+BigInt(t.amount),0n);
-      if(confirmed.result!=='SUCCESS' || debit!==-amount) throw new AppError('SWAP_UNCONFIRMED');
+      const output=confirmed.token_transfers.filter(t=>t.account===d.agentAccount && t.token_id===d.outputAsset).reduce((n,t)=>n+BigInt(t.amount),0n);
+      if(confirmed.result!=='SUCCESS' || confirmed.name!=='CONTRACTCALL' || confirmed.entity_id!==d.routerId || debit!==-amount || output<minimum) throw new AppError('SWAP_UNCONFIRMED');
       await publish(d,'fill',{status:'success',transactionId:result.txId,amount:amount.toString(),asset:d.spendAsset},'agent',reservation+'-hcs',store);
       store.updateSpend(mirrorTxId(result.txId),'success',true);
       return {transactionId:result.txId,mirrorTransactionId:mirrorTxId(result.txId),quotedOutput:estimate.amountOut};

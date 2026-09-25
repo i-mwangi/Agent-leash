@@ -3,7 +3,7 @@ import { checkPolicy, type PolicySnapshot } from "../../agent/src/policyClient";
 import type { LiveServices } from './live';
 import { AppError, uint, jsonSafe } from '../../shared/src/model';
 import { readDeployment } from '../../shared/src/files';
-import { quote, policySnapshot } from '../../shared/src/sources';
+import { fallbackQuote, quote, policySnapshot } from '../../shared/src/sources';
 
 export const demoPolicy: PolicySnapshot = {
   policyExists: true,
@@ -92,6 +92,11 @@ export function createApp(mode = "demo", services:()=>LiveServices|null=()=>null
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
     const parsed=uint.safeParse(c.req.query('amount')); if(!parsed.success) throw new AppError('INVALID_AMOUNT',400);
     return c.json(await quote(live.deployment,live.mirror,BigInt(parsed.data)));
+  });
+  app.get('/dex/fallback-quote',async c=>{
+    const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
+    const parsed=uint.safeParse(c.req.query('amount')); if(!parsed.success) throw new AppError('INVALID_AMOUNT',400);
+    return c.json(await fallbackQuote(live.deployment,live.mirror,BigInt(parsed.data)));
   });
   app.get('/.well-known/agent-card.json',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');

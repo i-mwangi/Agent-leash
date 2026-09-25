@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -22,6 +22,7 @@ const tabs = [
   "Spend",
 ] as const;
 type Tab = (typeof tabs)[number];
+type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean};
 export default function Home() {
   const [tab, setTab] = useState<Tab>("Overview");
   const [paused, setPaused] = useState(false);
@@ -31,6 +32,29 @@ export default function Home() {
     null,
   );
   const [busy, setBusy] = useState(false);
+  const [live,setLive]=useState<LiveView|null>(null);
+  const [fallback,setFallback]=useState<string|null>(null);
+  useEffect(()=>{
+    let mounted=true;
+    (async()=>{
+      try {
+        const [d,s]=await Promise.all([fetch('/api/deployment'),fetch('/api/status')]);
+        if(!d.ok || !s.ok) return;
+        const deployment=await d.json(),status=await s.json();
+        let agentKeyActive: boolean|undefined,livePaused:boolean|undefined;
+        if(deployment.mode==='testnet' && deployment.configured){
+          const a=await fetch('/api/agent/status');
+          if(a.ok){const facts=await a.json();agentKeyActive=facts.keyState?.agentKeyActive;livePaused=facts.paused;}
+        }
+        if(mounted) setLive({mode:deployment.mode,deployment:deployment.deployment,status,agentKeyActive,paused:livePaused});
+      } catch { /* Local demo remains available when the API is offline. */ }
+    })();
+    return ()=>{mounted=false;};
+  },[]);
+  async function readFallback(){
+    setFallback('Checking testnet pool…');
+    try{const response=await fetch('/api/dex/fallback-quote?amount=1000000');const data=await response.json();setFallback(response.ok?`Read-only quote: 1 SAUCE → ${Number(data.amountOut)/100000000} WHBAR. No transaction submitted.`:`Quote unavailable: ${data.error??response.status}`);}catch{setFallback('Quote unavailable: API offline');}
+  }
   async function preview() {
     setBusy(true);
     setResult(null);
@@ -100,7 +124,7 @@ export default function Home() {
         </nav>
         <div className="aside-bottom">
           <span className="network-dot" /> Hedera testnet target
-          <small>Demo data · no network transactions</small>
+          <small>{live?.mode==='testnet'?'Live reads · no browser signing':'Demo data · no network transactions'}</small>
           <a
             href="https://hedera.com/blog/scaffold-hbar-template-bounty/"
             target="_blank"
@@ -115,7 +139,7 @@ export default function Home() {
           <div>
             Workspace <span>/</span> <strong>{tab}</strong>
           </div>
-          <span className="demo-pill">LOCAL DEMO</span>
+          <span className="demo-pill">{live?.mode==='testnet'?'TESTNET READS':'LOCAL DEMO'}</span>
         </header>
         <div className="content">
           <div className="heading">
@@ -142,9 +166,15 @@ export default function Home() {
             </button>
           </div>
           <div className="notice">
-            <span>DEMO WORKSPACE</span> All account data is synthetic. Controls
-            below simulate policy checks; no funds move.
+            <span>{live?.mode==='testnet'?'TESTNET EVIDENCE':'DEMO WORKSPACE'}</span>{' '}
+            {live?.mode==='testnet'?'The live status panel reads the API. The switches and sample metrics remain simulations; no browser key is used.':'All account data is synthetic. Controls below simulate policy checks; no funds move.'}
           </div>
+          {live?.mode==='testnet' && <section className="panel detail" aria-label="Live testnet status">
+            <h2>Live testnet status</h2>
+            <p>Agent: <code>{live.deployment?.agentAccount??'not configured'}</code> · Guardian: <code>{live.deployment?.guardianId??'not configured'}</code></p>
+            <p>Key: {live.agentKeyActive===undefined?'unavailable':live.agentKeyActive?'agent active':'guardian-only'} · Policy: {live.paused===undefined?'unavailable':live.paused?'paused':'active'}</p>
+            <p>{live.status?.milestones?.map(item=>`${item.name}: ${item.ready?'ready':'pending'}`).join(' · ')}</p>
+          </section>}
           <section className="agent-card">
             <div className="agent-identity">
               <div className="agent-icon">
@@ -326,8 +356,7 @@ export default function Home() {
                 </li>
               </ol>
               <div className="notice">
-                Account creation and wallet connection are pending
-                implementation.
+                {live?.deployment?.agentAccount?<>Live account <a href={`https://hashscan.io/testnet/account/${live.deployment.agentAccount}`} target="_blank" rel="noreferrer">{live.deployment.agentAccount}</a> is deployed. The browser never receives its keys.</>:'Run the isolated CLI setup to create a live testnet account; this page does not hold spend keys.'}
               </div>
             </section>
           )}
@@ -348,8 +377,7 @@ export default function Home() {
                 </li>
               </ol>
               <div className="notice">
-                Live registration is pending. This demo does not claim an
-                on-chain identity.
+                {live?.deployment?.erc8004AgentId?<>Live ERC-8004 agent ID: {live.deployment.erc8004AgentId}. HCS topic: {live.deployment.hcsTopic}. UAID: <code>{live.deployment.uaid}</code>.</>:'Switch the API to testnet mode to view a deployed identity. The local demo does not claim registration.'}
               </div>
             </section>
           )}
@@ -363,11 +391,16 @@ export default function Home() {
               </p>
               <code>GET /standing/:id</code>
               <div className="notice">
-                Currently returns 503 SOURCES_NOT_CONFIGURED. No payment is
-                requested and no report is signed.
+                {live?.mode==='testnet' && live.deployment?.agentAccount?<>The live endpoint returns an x402 payment challenge. Run <code>npm run agent -- pay-standing</code> from the isolated CLI to pay and verify the report.</>:'In demo mode, standing remains unavailable; no payment is requested.'}
               </div>
             </section>
           )}
+          {tab === 'Spend' && live?.mode==='testnet' && <section className="panel detail">
+            <h2>SaucerSwap testnet fallback</h2>
+            <p>The configured USDC → WHBAR pool is unavailable. Inspect a real SAUCE → WHBAR V1 pool quote without signing a swap.</p>
+            <button className="secondary" onClick={readFallback}>Read pool quote</button>
+            {fallback && <p role="status">{fallback}</p>}
+          </section>}
           <section className="roadmap">
             <div className="panel-title">
               <h2>From scaffold to accountable agent</h2>
@@ -388,7 +421,7 @@ export default function Home() {
                   </span>
                   <strong>{step}</strong>
                   <small>
-                    {i === 0 ? "Local implementation" : "Integration pending"}
+                    {i===0?'Local implementation':i===1?'Testnet verified':i===2?'Paid testnet verified':'Read-only DEX fallback'}
                   </small>
                 </div>
               ))}

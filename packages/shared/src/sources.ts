@@ -61,6 +61,20 @@ export async function policySnapshot(d:Deployment,mirror:Mirror,pending:(confirm
   return {policyExists:true,paused:facts.paused,agentKeyActive:facts.keyState.agentKeyActive,hcsReady:true,identityRegistered:true,allowedTokens:allowed[0]?[d.spendAsset]:[],maxPerTx:facts.maxPerTx,maxPerDay:facts.maxPerDay,spentToday:day.total,pendingToday:pending(day.confirmed),balance};
 }
 export const ROUTER_ABI=new Interface(['function getAmountsOut(uint256,address[]) view returns(uint256[])','function swapExactTokensForTokens(uint256,uint256,address[],address,uint256) returns(uint256[])']);
+const FACTORY_ABI=new Interface(['function getPair(address,address) view returns(address)']);
+export const FALLBACK={factory:'0.0.9959',assetIn:'0.0.1183558',assetOut:'0.0.15058',decimalsIn:'6',decimalsOut:'8'} as const;
+/** A real testnet pool quote. It never authorizes or represents a swap. */
+export async function fallbackQuote(d:Deployment,mirror:Mirror,amount:bigint) {
+  if(amount<=0n) throw new AppError('INVALID_AMOUNT',400);
+  const [source,target]=await Promise.all([mirror.token(FALLBACK.assetIn),mirror.token(FALLBACK.assetOut)]);
+  if(source.deleted || target.deleted || source.decimals!==FALLBACK.decimalsIn || target.decimals!==FALLBACK.decimalsOut) throw new AppError('FALLBACK_TOKEN_MISMATCH');
+  const path=[FALLBACK.assetIn,FALLBACK.assetOut].map(evmAddress);
+  const pair=String((await mirror.call(evmAddress(FALLBACK.factory),FACTORY_ABI,'getPair',path))[0]);
+  if(/^0x0{40}$/i.test(pair)) throw new AppError('FALLBACK_POOL_MISSING');
+  const amounts=Array.from((await mirror.call(evmAddress(d.routerId),ROUTER_ABI,'getAmountsOut',[amount,path]))[0] as bigint[]);
+  if(amounts.length!==2 || amounts[0]!==amount || amounts[1]<=0n) throw new AppError('FALLBACK_QUOTE_INVALID');
+  return {network:'hedera:testnet',protocol:'SaucerSwap V1',mode:'read-only',router:d.routerId,factory:FALLBACK.factory,pair,assetIn:FALLBACK.assetIn,assetOut:FALLBACK.assetOut,decimalsIn:FALLBACK.decimalsIn,decimalsOut:FALLBACK.decimalsOut,amountIn:amount.toString(),amountOut:amounts[1].toString(),quotedAt:new Date().toISOString(),transactionSubmitted:false};
+}
 export async function quote(d:Deployment,mirror:Mirror,amount:bigint) {
   if(amount<=0n) throw new AppError('INVALID_AMOUNT',400);
   const path=[d.spendAsset,d.outputAsset].map(evmAddress);
