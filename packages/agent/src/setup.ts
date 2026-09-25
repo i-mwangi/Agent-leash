@@ -3,12 +3,12 @@ import { AbiCoder, Wallet, getBytes } from 'ethers';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ROOT, DATA, readDeployment, saveDeployment } from '../../shared/src/files';
-import { AppError, evmAddress, type Deployment, type ProfileEvent } from '../../shared/src/model';
+import { AppError, deploymentSchema, evmAddress, type Deployment, type ProfileEvent } from '../../shared/src/model';
 import { Mirror } from '../../shared/src/mirror';
 import { Store } from '../../shared/src/store';
 import { accountKeyState, checkDeploymentKeys, normalizedPublic } from '../../shared/src/keys';
 import { createUaid, agentData } from '../../shared/src/uaid';
-import { POLICY_ABI, IDENTITY_ABI, cardUri } from '../../shared/src/sources';
+import { POLICY_ABI, IDENTITY_ABI, cardUri, readFacts } from '../../shared/src/sources';
 import { clientFor, roleEnv, roleKey, nativeOperation, createSecretFile } from './runtime';
 
 export async function initialize() {
@@ -24,6 +24,22 @@ export async function initialize() {
   const agent=roleKey('agent'),guardian=roleKey('guardian'),attestation=new Wallet(roleEnv('server').ATTESTATION_PRIVATE_KEY);
   d={version:1,network:'testnet',name:'Atlas',operatorId:info.account,operatorPublicKey:operator.publicKey.toStringRaw(),agentPublicKey:agent.publicKey.toStringRaw(),guardianPublicKey:guardian.publicKey.toStringRaw(),attestationPublicKey:attestation.signingKey.compressedPublicKey.slice(2),attestationAddress:attestation.address,registry:'0x8004A818BFB912233c491871b3d84c89A494BD9e',standingBaseUrl:'http://localhost:3001',routerId:'0.0.19264',spendAsset:'0.0.429274',outputAsset:'0.0.15058'};
   checkDeploymentKeys(d); saveDeployment(d); return d;
+}
+/** Reattach a previously deployed account without creating a second one. */
+export async function adoptExisting(path:string) {
+  if(readDeployment()) throw new AppError('DEPLOYMENT_ALREADY_CONFIGURED',409);
+  const d=deploymentSchema.parse(JSON.parse(readFileSync(resolve(path),'utf8')));
+  if(!d.agentAccount || !d.guardianId || !d.hcsTopic || !d.policyAddress || !d.erc8004AgentId) throw new AppError('EXISTING_DEPLOYMENT_INCOMPLETE');
+  if(roleEnv('operator').HEDERA_NETWORK!=='testnet' || roleEnv('operator').HEDERA_OPERATOR_ID!==d.operatorId) throw new AppError('OPERATOR_ACCOUNT_MISMATCH');
+  if(roleKey('operator').publicKey.toStringRaw()!==d.operatorPublicKey || roleKey('agent').publicKey.toStringRaw()!==d.agentPublicKey || roleKey('guardian').publicKey.toStringRaw()!==d.guardianPublicKey) throw new AppError('DEPLOYMENT_KEY_MISMATCH');
+  const attestationKey=roleEnv('server').ATTESTATION_PRIVATE_KEY;
+  if(!attestationKey) throw new AppError('ATTESTATION_KEY_MISSING');
+  const attestation=new Wallet(attestationKey);
+  if(attestation.signingKey.compressedPublicKey.slice(2).toLowerCase()!==d.attestationPublicKey.toLowerCase() || attestation.address.toLowerCase()!==d.attestationAddress.toLowerCase()) throw new AppError('ATTESTATION_KEY_MISMATCH');
+  checkDeploymentKeys(d);
+  await readFacts(d,new Mirror());
+  saveDeployment(d);
+  return d;
 }
 export async function publish(d:Deployment,type:ProfileEvent['type'],payload:Record<string,unknown>,role:'operator'|'guardian'|'agent',name:string,store:Store) {
   if(!d.agentAccount || !d.hcsTopic) throw new AppError('HCS_NOT_READY');
