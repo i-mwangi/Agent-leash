@@ -37,7 +37,11 @@ export async function adoptExisting(path:string) {
   const attestation=new Wallet(attestationKey);
   if(attestation.signingKey.compressedPublicKey.slice(2).toLowerCase()!==d.attestationPublicKey.toLowerCase() || attestation.address.toLowerCase()!==d.attestationAddress.toLowerCase()) throw new AppError('ATTESTATION_KEY_MISMATCH');
   checkDeploymentKeys(d);
-  await readFacts(d,new Mirror());
+  const mirror=new Mirror();
+  const [operatorAccount,guardianAccount]=await Promise.all([mirror.account(d.operatorId),mirror.account(d.guardianId)]);
+  if(operatorAccount.key._type!=='ECDSA_SECP256K1' || normalizedPublic(operatorAccount.key.key)!==d.operatorPublicKey) throw new AppError('OPERATOR_ACCOUNT_KEY_MISMATCH');
+  if(guardianAccount.key._type!=='ECDSA_SECP256K1' || normalizedPublic(guardianAccount.key.key)!==d.guardianPublicKey) throw new AppError('GUARDIAN_ACCOUNT_KEY_MISMATCH');
+  await readFacts(d,mirror);
   saveDeployment(d);
   return d;
 }
