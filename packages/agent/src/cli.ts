@@ -3,6 +3,7 @@ import { readDeployment, DATA } from '../../shared/src/files';
 import { Mirror } from '../../shared/src/mirror';
 import { readFacts, quote } from '../../shared/src/sources';
 import { spend } from './spend';
+import { payStanding } from './payment';
 import { AppError, jsonSafe, uint } from '../../shared/src/model';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -18,6 +19,7 @@ async function main(){
   if(command==='status') return readFacts(d,new Mirror());
   if(command==='quote') return quote(d,new Mirror(),BigInt(uint.parse(args[0])));
   if(command==='spend') return spend(BigInt(uint.parse(args[0])));
-  throw new AppError('USAGE: init | setup | register | status | quote AMOUNT | spend AMOUNT | pause | unpause | caps TX DAY | revoke | evidence',400);
+  if(command==='pay-standing') return payStanding();
+  throw new AppError('USAGE: init | setup | register | status | pay-standing | quote AMOUNT | spend AMOUNT | pause | unpause | caps TX DAY | revoke | evidence',400);
 }
 main().then(result=>console.log(JSON.stringify(jsonSafe(result),null,2))).catch(error=>{console.error(error instanceof AppError?error.code:error instanceof Error?error.message:'COMMAND_FAILED');process.exitCode=1;});

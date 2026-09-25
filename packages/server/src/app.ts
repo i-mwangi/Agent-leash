@@ -22,22 +22,28 @@ export function createApp(mode = "demo", services:()=>LiveServices|null=()=>null
   const app = new Hono();
   app.onError((error,c)=>c.json({error:error instanceof AppError?error.code:'SOURCE_UNAVAILABLE',paymentRequired:false},error instanceof AppError?error.status:503));
   app.use('*',async(c,next)=>{c.header('Cache-Control','no-store');await next();});
-  app.get("/health", (c) =>
-    c.json({ ok: true, mode, network: "testnet", liveAdaptersReady: false }),
-  );
-  app.get("/status", (c) =>
-    c.json({
-      mode,
-      liveAdaptersReady: false,
-      milestones: [
-        { name: "Local policy engine", ready: true },
-        { name: "Guardian policy contract", ready: true },
-        { name: "Hedera account and HCS registration", ready: false },
-        { name: "x402 settlement and signed standing", ready: false },
-        { name: "SaucerSwap execution", ready: false },
-      ],
-    }),
-  );
+  app.get("/health", async c=>{
+    const live=mode==='testnet'?services():null;
+    let sourcesReady=false;
+    if(live) try{await live.ready(live.deployment.agentAccount??'');sourcesReady=true;}catch{ /* Report unavailable, never claim readiness. */ }
+    return c.json({ok:true,mode,network:'testnet',liveAdaptersReady:sourcesReady});
+  });
+  app.get("/status", async c=>{
+    const live=mode==='testnet'?services():null;
+    let identityReady=false,paymentChallengeReady=false,dexQuoteReady=false;
+    if(live) {
+      try{await live.ready(live.deployment.agentAccount??'');identityReady=true;}catch{ /* Fail closed. */ }
+      if(identityReady) try{await live.payments.requirements();paymentChallengeReady=true;}catch{ /* Fail closed. */ }
+      if(identityReady) try{await quote(live.deployment,live.mirror,1000n);dexQuoteReady=true;}catch{ /* A missing pool is not a successful quote. */ }
+    }
+    return c.json({mode,liveAdaptersReady:identityReady&&paymentChallengeReady,milestones:[
+      {name:'Local policy engine',ready:true},
+      {name:'Guardian policy contract',ready:identityReady},
+      {name:'Hedera account and HCS registration',ready:identityReady},
+      {name:'x402 payment challenge',ready:paymentChallengeReady},
+      {name:'SaucerSwap quote',ready:dexQuoteReady},
+    ]});
+  });
   app.post("/demo/policy/preview", async (c) => {
     if (mode !== "demo") return c.json({ error: "DEMO_DISABLED" }, 404);
     let body: Record<string, unknown>;

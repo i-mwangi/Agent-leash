@@ -22,7 +22,8 @@ export function loadLiveServices():LiveServices|null {
   const wallet=new Wallet(env.ATTESTATION_PRIVATE_KEY);
   if(normalizedPublic(wallet.signingKey.compressedPublicKey)!==d.attestationPublicKey || wallet.address.toLowerCase()!==d.attestationAddress.toLowerCase()) throw new AppError('ATTESTATION_KEY_MISMATCH');
   const mirror=new Mirror();
-  const payments=new Payments(mirror,new Store(resolve(DATA,'server.sqlite')),d.operatorId);
+  if(!d.agentAccount) throw new AppError('AGENT_ACCOUNT_MISSING');
+  const payments=new Payments(mirror,new Store(resolve(DATA,'server.sqlite')),d.agentAccount);
   const ready=async(id:string)=>{if(!resolvePublicId(d,id)) throw new AppError('AGENT_NOT_FOUND',404); return readFacts(d,mirror);};
   return {deployment:d,mirror,payments,ready,report:async(id:string)=>{
     const facts=await ready(id); const issuedAt=Math.floor(Date.now()/1000);

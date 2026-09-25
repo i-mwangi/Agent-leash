@@ -23,6 +23,7 @@ npm run agent -- init
 npm run agent -- setup
 npm run agent -- register
 npm run agent -- status
+npm run agent -- pay-standing
 npm run agent -- quote 1000
 npm run agent -- spend 1000
 npm run agent -- pause
@@ -31,6 +32,8 @@ npm run agent -- revoke
 ```
 
 The CLI creates separate ignored `.env.agent`, `.env.guardian`, and `.env.server` files. Never commit keys or load spend keys in the server. Amounts are raw smallest units: testnet USDC `0.0.429274` has six decimals, so `1000` is 0.001 USDC. Setup is resumable; a successful transaction whose local result was interrupted requires manual reconciliation rather than a duplicate write.
+
+Start the testnet API in a separate terminal before `pay-standing`: PowerShell: `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`; Bash: `APP_MODE=testnet npm run dev -w @accountable/server`. The operator account must hold testnet USDC and the agent account must be associated with it.
 
 The spend command serializes requests, reserves the raw amount durably before submission, checks mirror-backed account/HCS/registry/policy/balance sources immediately before signing, and confirms the token debit before publishing a fill. Uncertain submissions stay reserved. Guardian `revoke` updates the account to a guardian-only key. It cannot undo prior spending.
 
@@ -46,15 +49,15 @@ These are **testnet writes** from one local deployment on 25 September 2026, sep
 | Policy contract `0.0.10715941` | [deployment](https://hashscan.io/testnet/transaction/0.0.5792828%401790349205.179484212), [allowlist](https://hashscan.io/testnet/transaction/0.0.10715881%401790349210.300763930) |
 | ERC-8004 agent `121` | [registration](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [card update](https://hashscan.io/testnet/transaction/0.0.5792828%401790349280.300460069) |
 | Token associations | [USDC](https://hashscan.io/testnet/transaction/0.0.10715883%401790349220.774920691), [WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790349224.140844625) |
+| x402 paid standing | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790350541.346608081), operator `0.0.5792828` → agent `0.0.10715883` |
 
 `npm run agent -- status` reads and cross-checks the mirror account key, HCS publishers/events, registry owner/card, and guardian policy. These public IDs are examples, not fresh-scaffold defaults.
 
 ## Current integration limits
 
-The API implements x402 v2 payment requirements, Blocky402 verification/settlement, independent mirror transfer confirmation, replay protection, and signed EIP-712 standing. **No paid standing response has been verified end to end**: the example account currently has zero testnet USDC. Missing identity or settlement sources fail closed.
-The testnet API did return an unpaid `402 Payment Required` challenge with the expected Hedera USDC asset; that is challenge evidence, not payment evidence.
+The API implements x402 v2 payment requirements, Blocky402 verification/settlement, independent mirror transfer confirmation, replay protection, and signed EIP-712 standing. With the local testnet server running (`APP_MODE=testnet`), `pay-standing` paid 0.001 USDC, checked the mirror debit/credit, and verified the signed report against the pinned attestation address and policy. The report expires after two minutes. Missing identity or settlement sources fail closed.
 
-The SaucerSwap V1 router `0.0.19264` exists on testnet, but `getAmountsOut` for the configured USDC → WHBAR route currently reverts. `quote` and `spend` stop with `DEX_QUOTE_REVERTED`; **no swap has executed**. A working pool/route and funded agent are prerequisites for live fill evidence. A forked-mainnet route has not been executed. The current adapter is a read-only integration limit under the bounty brief, not trade evidence.
+The SaucerSwap V1 router `0.0.19264` exists on testnet, but there is no V1 or V2 USDC → WHBAR pool at the configured addresses. `getAmountsOut` reverts; `quote` and `spend` stop with `DEX_QUOTE_REVERTED`. **No swap has executed.** A working pool/route and funded spend asset are prerequisites for live fill evidence. A forked-mainnet route has not been executed. The current adapter is a read-only integration limit under the bounty brief, not trade evidence.
 
 The card's default standing endpoint is `localhost:3001`, for local development only. Set a reachable URL before registration for a public paid endpoint. The UI is synthetic and must not be presented as live standing.
 
