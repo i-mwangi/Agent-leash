@@ -57,7 +57,7 @@ These are **testnet writes** from one local deployment on 25 September 2026, sep
 
 The API implements x402 v2 payment requirements, Blocky402 verification/settlement, independent mirror transfer confirmation, replay protection, and signed EIP-712 standing. With the local testnet server running (`APP_MODE=testnet`), `pay-standing` paid 0.001 USDC, checked the mirror debit/credit, and verified the signed report against the pinned attestation address and policy. The report expires after two minutes. Missing identity or settlement sources fail closed.
 
-The SaucerSwap V1 router `0.0.19264` exists on testnet, but there is no V1 or V2 USDC → WHBAR pool at the configured addresses. `getAmountsOut` reverts; `quote` and `spend` stop with `DEX_QUOTE_REVERTED`. **No swap has executed.** A working pool/route and funded spend asset are prerequisites for live fill evidence. A forked-mainnet route has not been executed. The current adapter is a read-only integration limit under the bounty brief, not trade evidence.
+The SaucerSwap V1 router `0.0.19264` exists on testnet, but there is no V1 or V2 USDC → WHBAR pool at the configured addresses. `getAmountsOut` reverts; `quote` and `spend` stop with `DEX_QUOTE_REVERTED`. **No swap has executed, and no successful read-only quote or forked-mainnet execution has been demonstrated.** A usable route or reproducible fallback is still required for the DEX part of the guide.
 
 The card's default standing endpoint is `localhost:3001`, for local development only. Set a reachable URL before registration for a public paid endpoint. The UI is synthetic and must not be presented as live standing.
 
