@@ -1,0 +1,48 @@
+{
+  "name": "accountable-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "agent": "tsx packages/agent/src/cli.ts",
+    "dev": "concurrently -k -n api,web \"npm run dev -w @accountable/server\" \"npm run dev -w @accountable/web\"",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "eslint packages --max-warnings 0",
+    "typecheck": "tsc --noEmit -p tsconfig.json && npm run typecheck -w @accountable/web",
+    "test": "vitest run && npm run test -w @accountable/contracts",
+    "check": "npm run lint && npm run typecheck && npm test && npm run build"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.0",
+    "@types/node": "^22.18.0",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.39.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.0",
+    "vitest": "^5.0.1"
+  },
+  "dependencies": {
+    "@hiero-ledger/proto": "2.31.0",
+    "@hiero-ledger/sdk": "^2.88.0",
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "@x402/core": "^2.27.0",
+    "@x402/fetch": "^2.27.0",
+    "@x402/hedera": "^2.27.0",
+    "dotenv": "^18.0.3",
+    "ethers": "^6.17.0",
+    "zod": "^3.25.76"
+  },
+  "overrides": {
+    "@hiero-ledger/sdk": "$@hiero-ledger/sdk",
+    "protobufjs": "8.6.6",
+    "ws": "8.21.0"
+  }
+}

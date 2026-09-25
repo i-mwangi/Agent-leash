@@ -1,0 +1,31 @@
+{
+  "name": "accountable-agent",
+  "version": "0.1.0",
+  "description": "Agent wallets with client-enforced policy and guardian revocation on Hedera.",
+  "create-scaffold-hbar": {
+    "requirements": { "node": ">=22.13.0" },
+    "capabilities": {
+      "frontend": ["nextjs-app"],
+      "solidityFramework": ["hardhat"],
+      "packageManager": ["npm"]
+    },
+    "defaults": {
+      "frontend": "nextjs-app",
+      "solidityFramework": "hardhat",
+      "packageManager": "npm"
+    },
+    "outro": {
+      "sections": [
+        {
+          "title": "Run Accountable Agent",
+          "steps": [
+            { "command": "{run:dev}" },
+            {
+              "text": "Open http://localhost:3000. Local demo only; read README.md before configuring testnet."
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

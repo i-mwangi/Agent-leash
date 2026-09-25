@@ -1,0 +1,13 @@
+{
+  "name": "@accountable/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test solidity"
+  },
+  "devDependencies": {
+    "hardhat": "3.18.0"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "source": "https://github.com/hashgraph-online/standards-sdk/tree/5f6c5ff4ffc2a4aaa7dcc01192dd82c307a5335e",
+  "input": {
+    "registry": "HASHGRAPH-ONLINE",
+    "name": "  Support Agent  ",
+    "version": "1.0.0",
+    "protocol": "HCS-10",
+    "nativeId": " hedera:testnet:0.0.123456 ",
+    "skills": [
+      17,
+      0
+    ]
+  },
+  "canonicalJson": "{\"skills\":[0,17],\"name\":\"Support Agent\",\"nativeId\":\"hedera:testnet:0.0.123456\",\"protocol\":\"hcs-10\",\"registry\":\"hashgraph-online\",\"version\":\"1.0.0\"}",
+  "uaid": "uaid:aid:8Tu9ZhoSQeM6eqWArkixVgWn39EwpDcpTZNhjydZ4AFGQCDmmZCnrQK3CKRtYqf4VG;uid=0;registry=hashgraph-online;nativeId=hedera:testnet:0.0.123456"
+}
