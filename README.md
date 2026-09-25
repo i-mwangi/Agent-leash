@@ -14,6 +14,8 @@ npm run dev
 
 Use Node 22.13+ (Node 24 recommended). The dashboard at `http://localhost:3000` is an explicitly synthetic local demo. The API runs at `http://127.0.0.1:3001`.
 
+The published `i-mwangi/Agent-leash#main` template was fetched with `create-scaffold-hbar@0.4.0`; `npm ci` and `npm run check` passed in that fresh scaffold.
+
 For a **new testnet deployment**, copy `.env.operator.example` to `.env.operator`, set a funded `HEDERA_OPERATOR_ID` and `HEDERA_OPERATOR_KEY` locally, then run:
 
 ```sh
@@ -50,6 +52,7 @@ These are **testnet writes** from one local deployment on 25 September 2026, sep
 ## Current integration limits
 
 The API implements x402 v2 payment requirements, Blocky402 verification/settlement, independent mirror transfer confirmation, replay protection, and signed EIP-712 standing. **No paid standing response has been verified end to end**: the example account currently has zero testnet USDC. Missing identity or settlement sources fail closed.
+The testnet API did return an unpaid `402 Payment Required` challenge with the expected Hedera USDC asset; that is challenge evidence, not payment evidence.
 
 The SaucerSwap V1 router `0.0.19264` exists on testnet, but `getAmountsOut` for the configured USDC → WHBAR route currently reverts. `quote` and `spend` stop with `DEX_QUOTE_REVERTED`; **no swap has executed**. A working pool/route and funded agent are prerequisites for live fill evidence. A forked-mainnet route has not been executed. The current adapter is a read-only integration limit under the bounty brief, not trade evidence.
 

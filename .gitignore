@@ -12,3 +12,4 @@ cache/
 *.log
 .accountable/
 .scaffold-smoke/
+scaffold-smoke*/
