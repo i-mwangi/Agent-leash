@@ -43,8 +43,9 @@ export function createAgentMcp() {
       const mirror=new Mirror(),tx=await mirror.transaction(transactionId);
       const id=mirrorTxId(transactionId),raw=BigInt(amount);
       if(status==='success') {
-        const net=tx.token_transfers.filter(t=>t.account===d.agentAccount && t.token_id===d.spendAsset).reduce((n,t)=>n+exactUnits(t.amount),0n);
-        const output=tx.token_transfers.filter(t=>t.account===d.agentAccount && t.token_id===d.outputAsset).reduce((n,t)=>n+exactUnits(t.amount),0n);
+        const {transfers}=await mirror.contractTransfers(id);
+        const net=transfers.filter(t=>t.account===d.agentAccount && t.token_id===d.spendAsset).reduce((n,t)=>n+exactUnits(t.amount),0n);
+        const output=transfers.filter(t=>t.account===d.agentAccount && t.token_id===d.outputAsset).reduce((n,t)=>n+exactUnits(t.amount),0n);
         if(tx.result!=='SUCCESS' || tx.name!=='CONTRACTCALL' || tx.entity_id!==d.routerId || raw<=0n || net!==-raw || output<=0n) throw new AppError('FILL_PROOF_INVALID');
       } else if(tx.result==='SUCCESS') throw new AppError('FAILED_OUTCOME_CONFLICT');
       const events=await mirror.events(d.hcsTopic);

@@ -48,6 +48,15 @@ describe('identity and signing',()=>{
   });
 });
 describe('settlement and durable reservations',()=>{
+  it('confirms contract HTS transfers from child nonces and rejects failed children',async()=>{
+    const id='0.0.5-123-400000000';
+    const rows=[{transaction_id:id,result:'SUCCESS',consensus_timestamp:'123.4',nonce:0,name:'CONTRACTCALL',entity_id:'0.0.9',token_transfers:[]},{transaction_id:id,result:'SUCCESS',consensus_timestamp:'123.5',nonce:1,name:'CRYPTOTRANSFER',token_transfers:[{token_id:'0.0.7',account:'0.0.8',amount:10}]}];
+    const fetcher=vi.fn(async()=>new Response(JSON.stringify({transactions:rows}),{status:200}));
+    const mirror=new Mirror(fetcher as unknown as typeof fetch);
+    expect((await mirror.contractTransfers(id)).transfers).toEqual(rows[1].token_transfers);
+    rows[1].result='FAIL';
+    await expect(mirror.contractTransfers(id)).rejects.toThrow('CONTRACT_CHILD_FAILED');
+  });
   it('normalizes IDs and rejects unsafe or mismatched settlement',()=>{
     expect(mirrorTxId('0.0.5@123.4')).toBe('0.0.5-123-400000000');
     const tx={transaction_id:'0.0.5-123-400000000',result:'SUCCESS',consensus_timestamp:'123.4',token_transfers:[{token_id:'0.0.429274',account:'0.0.6',amount:1000},{token_id:'0.0.429274',account:'0.0.7',amount:-1000}]};

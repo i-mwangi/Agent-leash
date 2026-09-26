@@ -3,12 +3,12 @@ import { AbiCoder, Wallet, getBytes } from 'ethers';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ROOT, DATA, readDeployment, saveDeployment } from '../../shared/src/files';
-import { AppError, deploymentSchema, evmAddress, type Deployment, type ProfileEvent } from '../../shared/src/model';
-import { Mirror } from '../../shared/src/mirror';
+import { AppError, deploymentSchema, evmAddress, USDC, type Deployment, type ProfileEvent } from '../../shared/src/model';
+import { Mirror, exactUnits } from '../../shared/src/mirror';
 import { Store } from '../../shared/src/store';
 import { accountKeyState, checkDeploymentKeys, normalizedPublic } from '../../shared/src/keys';
 import { createUaid, agentData } from '../../shared/src/uaid';
-import { POLICY_ABI, IDENTITY_ABI, cardUri, readFacts } from '../../shared/src/sources';
+import { POLICY_ABI, IDENTITY_ABI, ROUTER_ABI, FALLBACK, cardUri, readFacts, quote } from '../../shared/src/sources';
 import { clientFor, roleEnv, roleKey, nativeOperation, createSecretFile } from './runtime';
 
 export async function initialize() {
@@ -22,7 +22,7 @@ export async function initialize() {
   for(const role of ['agent','guardian'] as const) if(!existsSync(resolve(ROOT,`.env.${role}`))) createSecretFile(role,`${role.toUpperCase()}_PRIVATE_KEY=${PrivateKey.generateECDSA().toStringRaw()}\n`);
   if(!existsSync(resolve(ROOT,'.env.server'))) createSecretFile('server',`APP_MODE=testnet\nATTESTATION_PRIVATE_KEY=${Wallet.createRandom().privateKey}\n`);
   const agent=roleKey('agent'),guardian=roleKey('guardian'),attestation=new Wallet(roleEnv('server').ATTESTATION_PRIVATE_KEY);
-  d={version:1,network:'testnet',name:'Atlas',operatorId:info.account,operatorPublicKey:operator.publicKey.toStringRaw(),agentPublicKey:agent.publicKey.toStringRaw(),guardianPublicKey:guardian.publicKey.toStringRaw(),attestationPublicKey:attestation.signingKey.compressedPublicKey.slice(2),attestationAddress:attestation.address,registry:'0x8004A818BFB912233c491871b3d84c89A494BD9e',standingBaseUrl:'http://localhost:3001',routerId:'0.0.19264',spendAsset:'0.0.429274',outputAsset:'0.0.15058'};
+  d={version:1,network:'testnet',name:'Atlas',operatorId:info.account,operatorPublicKey:operator.publicKey.toStringRaw(),agentPublicKey:agent.publicKey.toStringRaw(),guardianPublicKey:guardian.publicKey.toStringRaw(),attestationPublicKey:attestation.signingKey.compressedPublicKey.slice(2),attestationAddress:attestation.address,registry:'0x8004A818BFB912233c491871b3d84c89A494BD9e',standingBaseUrl:'http://localhost:3001',routerId:'0.0.19264',spendAsset:FALLBACK.assetIn,outputAsset:FALLBACK.assetOut};
   checkDeploymentKeys(d); saveDeployment(d); return d;
 }
 /** Reattach a previously deployed account without creating a second one. */
@@ -92,7 +92,7 @@ export async function setup() {
     await publish(d,'policy',{address:d.policyAddress},'operator','hcs-policy',store);
     const agentClient=clientFor(d.agentAccount,roleKey('agent'));
     try {
-      for(const token of [d.spendAsset,d.outputAsset]) {
+      for(const token of new Set([USDC,d.spendAsset,d.outputAsset])) {
         const associations=await mirror.json<{tokens:{token_id:string}[]}>(`/api/v1/accounts/${d.agentAccount}/tokens?token.id=${token}`);
         if(!associations.tokens.some(t=>t.token_id===token)) await nativeOperation('associate-'+token,new TokenAssociateTransaction().setAccountId(d.agentAccount).setTokenIds([token]),agentClient,store);
       }
@@ -117,7 +117,7 @@ export async function register() {
     return d;
   });}finally{client.close();store.close();}
 }
-export async function guardianAction(action:'pause'|'unpause'|'revoke'|'caps',caps?:[bigint,bigint]) {
+export async function guardianAction(action:'pause'|'unpause'|'revoke'|'restore'|'caps',caps?:[bigint,bigint]) {
   const d=readDeployment();if(!d?.agentAccount || !d.guardianId || !d.policyContractId) throw new AppError('SETUP_REQUIRED');
   const key=roleKey('guardian');if(key.publicKey.toStringRaw()!==d.guardianPublicKey) throw new AppError('GUARDIAN_KEY_MISMATCH');
   const client=clientFor(d.guardianId,key);const store=new Store(resolve(DATA,'guardian.sqlite'));const name=`${action}-${Date.now()}`;
@@ -126,8 +126,54 @@ export async function guardianAction(action:'pause'|'unpause'|'revoke'|'caps',ca
       const result=await nativeOperation(name,new AccountUpdateTransaction().setAccountId(d.agentAccount!).setKey(key.publicKey),client,store,[key]);
       await publish(d,'rotated',{agentKeyActive:false,transactionId:result.txId},'guardian',name+'-hcs',store);return result;
     }
+    if(action==='restore') {
+      const current=await new Mirror().account(d.agentAccount!);
+      if(accountKeyState(current.key,d.agentPublicKey,d.guardianPublicKey).agentKeyActive) throw new AppError('AGENT_KEY_ALREADY_ACTIVE');
+      const result=await nativeOperation(name,new AccountUpdateTransaction().setAccountId(d.agentAccount!).setKey(new KeyList([PublicKey.fromStringECDSA(d.agentPublicKey),key.publicKey],1)),client,store,[key]);
+      await publish(d,'rotated',{agentKeyActive:true,transactionId:result.txId},'guardian',name+'-hcs',store);return result;
+    }
     const method=action==='caps'?'setCaps':action;
     const result=await nativeOperation(name,new ContractExecuteTransaction().setContractId(d.policyContractId!).setGas(300000).setFunctionParameters(getBytes(POLICY_ABI.encodeFunctionData(method,caps??[]))),client,store);
     await publish(d,action==='caps'?'policy':action==='pause'?'paused':'unpaused',{address:d.policyAddress,transactionId:result.txId},'guardian',name+'-hcs',store);return result;
+  });}finally{client.close();store.close();}
+}
+/** Switch a previously deployed template to the verified testnet V1 SAUCE/WHBAR pool. */
+export async function configureDex() {
+  const d=readDeployment();if(!d?.agentAccount || !d.guardianId || !d.policyContractId) throw new AppError('SETUP_REQUIRED');
+  const mirror=new Mirror();const proposed={...d,spendAsset:FALLBACK.assetIn,outputAsset:FALLBACK.assetOut};
+  await quote(proposed,mirror,1_000_000n);
+  const agent=await mirror.account(d.agentAccount);
+  if(!accountKeyState(agent.key,d.agentPublicKey,d.guardianPublicKey).agentKeyActive) throw new AppError('AGENT_KEY_INACTIVE');
+  const store=new Store(resolve(DATA,'guardian.sqlite'));
+  try{return await store.exclusive('configure-dex',async()=>{
+    const guardian=clientFor(d.guardianId!,roleKey('guardian'));
+    try {await nativeOperation('allow-sauce',new ContractExecuteTransaction().setContractId(d.policyContractId!).setGas(300000).setFunctionParameters(getBytes(POLICY_ABI.encodeFunctionData('setAllowedTokens',[[FALLBACK.assetIn],true]))),guardian,store);}finally{guardian.close();}
+    const associations=await mirror.json<{tokens:{token_id:string}[]}>(`/api/v1/accounts/${d.agentAccount}/tokens?token.id=${FALLBACK.assetIn}`);
+    if(!associations.tokens.some(t=>t.token_id===FALLBACK.assetIn)) {
+      const agentClient=clientFor(d.agentAccount!,roleKey('agent'));
+      try {await nativeOperation('associate-sauce',new TokenAssociateTransaction().setAccountId(d.agentAccount!).setTokenIds([FALLBACK.assetIn]),agentClient,store);}finally{agentClient.close();}
+    }
+    d.spendAsset=FALLBACK.assetIn;d.outputAsset=FALLBACK.assetOut;saveDeployment(d);return d;
+  });}finally{store.close();}
+}
+/** Buy testnet SAUCE for the agent with operator HBAR; separate from the agent's policy-checked spend. */
+export async function fundDex(tinybars:bigint) {
+  if(tinybars<=0n || tinybars>100_000_000n) throw new AppError('FUND_AMOUNT_OUT_OF_RANGE',400);
+  const d=readDeployment();if(!d?.agentAccount || d.spendAsset!==FALLBACK.assetIn || d.outputAsset!==FALLBACK.assetOut) throw new AppError('DEX_NOT_CONFIGURED');
+  const mirror=new Mirror();const [source,target]=await Promise.all([mirror.token(FALLBACK.assetOut),mirror.token(FALLBACK.assetIn)]);
+  if(source.decimals!=='8' || target.decimals!=='6' || source.deleted || target.deleted) throw new AppError('DEX_TOKEN_MISMATCH');
+  const path=[FALLBACK.assetOut,FALLBACK.assetIn].map(evmAddress);
+  const amounts=(await mirror.call(evmAddress(d.routerId),ROUTER_ABI,'getAmountsOut',[tinybars,path]))[0] as bigint[];
+  if(amounts.length!==2 || amounts[0]!==tinybars || amounts[1]<=0n) throw new AppError('DEX_NO_LIQUIDITY');
+  const min=amounts[1]*99n/100n;
+  const recipient=(await mirror.account(d.agentAccount)).evm_address;
+  const client=clientFor(d.operatorId,roleKey('operator'));const store=new Store(resolve(DATA,'operator.sqlite'));
+  try {return await store.exclusive('fund-dex',async()=>{
+    const result=await nativeOperation(`fund-dex-${tinybars}-${Date.now()}`,new ContractExecuteTransaction().setContractId(d.routerId).setGas(700000).setPayableAmount(Hbar.fromTinybars(tinybars.toString())).setFunctionParameters(getBytes(ROUTER_ABI.encodeFunctionData('swapExactETHForTokens',[min,path,recipient,BigInt(Math.floor(Date.now()/1000)+120)]))),client,store);
+    const {parent,transfers}=await mirror.contractTransfers(result.txId);
+    if(parent.entity_id!==d.routerId) throw new AppError('DEX_FUND_UNCONFIRMED');
+    const received=transfers.filter(t=>t.account===d.agentAccount && t.token_id===FALLBACK.assetIn).reduce((n,t)=>n+exactUnits(t.amount),0n);
+    if(received<min) throw new AppError('DEX_FUND_UNCONFIRMED');
+    return {transactionId:result.txId,received:received.toString()};
   });}finally{client.close();store.close();}
 }

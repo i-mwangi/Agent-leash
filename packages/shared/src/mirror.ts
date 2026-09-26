@@ -58,6 +58,16 @@ export class Mirror {
     if(!tx) throw new AppError('SETTLEMENT_UNCONFIRMED');
     return tx;
   }
+  /** HTS transfers made by a contract call appear in child transaction nonces. */
+  async contractTransfers(id:string) {
+    const txId=mirrorTxId(id);
+    const data=await this.json<{transactions:MirrorTransaction[]}>(`/api/v1/transactions/${txId}`);
+    const rows=data.transactions.filter(t=>t.transaction_id===txId && t.result!=='DUPLICATE_TRANSACTION');
+    const parent=rows.find(t=>(t.nonce??0)===0);
+    if(!parent || parent.result!=='SUCCESS' || parent.name!=='CONTRACTCALL') throw new AppError('CONTRACT_TRANSFER_UNCONFIRMED');
+    if(rows.some(t=>t.result!=='SUCCESS')) throw new AppError('CONTRACT_CHILD_FAILED');
+    return {parent,transfers:rows.flatMap(t=>t.token_transfers)};
+  }
   async waitTransaction(id:string, attempts=8) {
     for(let i=0;i<attempts;i++) {
       try { return await this.transaction(id); } catch(error) {

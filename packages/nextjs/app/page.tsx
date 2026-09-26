@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import { GuardianWallet } from './guardian-wallet';
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -22,7 +23,7 @@ const tabs = [
   "Spend",
 ] as const;
 type Tab = (typeof tabs)[number];
-type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean};
+type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean};
 export default function Home() {
   const [tab, setTab] = useState<Tab>("Overview");
   const [paused, setPaused] = useState(false);
@@ -124,7 +125,7 @@ export default function Home() {
         </nav>
         <div className="aside-bottom">
           <span className="network-dot" /> Hedera testnet target
-          <small>{live?.mode==='testnet'?'Live reads · no browser signing':'Demo data · no network transactions'}</small>
+          <small>{live?.mode==='testnet'?'Live reads · optional guardian wallet':'Demo data · no network transactions'}</small>
           <a
             href="https://hedera.com/blog/scaffold-hbar-template-bounty/"
             target="_blank"
@@ -167,7 +168,7 @@ export default function Home() {
           </div>
           <div className="notice">
             <span>{live?.mode==='testnet'?'TESTNET EVIDENCE':'DEMO WORKSPACE'}</span>{' '}
-            {live?.mode==='testnet'?'The live status panel reads the API. The switches and sample metrics remain simulations; no browser key is used.':'All account data is synthetic. Controls below simulate policy checks; no funds move.'}
+            {live?.mode==='testnet'?'The live status panel reads the API. The switches and sample metrics remain simulations; the separate guardian wallet panel can request real testnet signatures.':'All account data is synthetic. Controls below simulate policy checks; no funds move.'}
           </div>
           {live?.mode==='testnet' && <section className="panel detail" aria-label="Live testnet status">
             <h2>Live testnet status</h2>
@@ -360,6 +361,7 @@ export default function Home() {
               </div>
             </section>
           )}
+          {tab === 'Policy' && live?.mode==='testnet' && live.deployment && <section className="panel detail"><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>window.location.reload()}/></section>}
           {tab === "Register" && (
             <section className="panel detail">
               <h2>Identity that other agents can verify</h2>
@@ -396,8 +398,8 @@ export default function Home() {
             </section>
           )}
           {tab === 'Spend' && live?.mode==='testnet' && <section className="panel detail">
-            <h2>SaucerSwap testnet fallback</h2>
-            <p>The configured USDC → WHBAR pool is unavailable. Inspect a real SAUCE → WHBAR V1 pool quote without signing a swap.</p>
+            <h2>SaucerSwap testnet route</h2>
+            <p>Inspect the live SAUCE → WHBAR V1 pool. The agent signs a swap through the isolated CLI after checking its policy; this quote button only reads the pool.</p>
             <button className="secondary" onClick={readFallback}>Read pool quote</button>
             {fallback && <p role="status">{fallback}</p>}
           </section>}

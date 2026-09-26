@@ -50,7 +50,8 @@ export async function dailySpend(events:ConsensusEvent[],account:string,asset:st
     if(tx.result!=='SUCCESS') throw new AppError('HCS_FILL_MISMATCH');
     confirmed.add(txId);
     if(new Date(Number(tx.consensus_timestamp.split('.')[0])*1000).toISOString().slice(0,10)!==today) continue;
-    const net=tx.token_transfers.filter(t=>t.account===account && t.token_id===asset).reduce((n,t)=>n+exactUnits(t.amount),0n);
+    const {transfers}=await mirror.contractTransfers(txId);
+    const net=transfers.filter(t=>t.account===account && t.token_id===asset).reduce((n,t)=>n+exactUnits(t.amount),0n);
     if(net<0n) total-=net;
   }
   return {total,confirmed};
@@ -60,7 +61,7 @@ export async function policySnapshot(d:Deployment,mirror:Mirror,pending:(confirm
   const [balance,allowed,day]=await Promise.all([mirror.balance(d.agentAccount!,d.spendAsset),mirror.call(facts.policy,POLICY_ABI,'allowedTokens',[d.spendAsset]),dailySpend(facts.events,d.agentAccount!,d.spendAsset,mirror)]);
   return {policyExists:true,paused:facts.paused,agentKeyActive:facts.keyState.agentKeyActive,hcsReady:true,identityRegistered:true,allowedTokens:allowed[0]?[d.spendAsset]:[],maxPerTx:facts.maxPerTx,maxPerDay:facts.maxPerDay,spentToday:day.total,pendingToday:pending(day.confirmed),balance};
 }
-export const ROUTER_ABI=new Interface(['function getAmountsOut(uint256,address[]) view returns(uint256[])','function swapExactTokensForTokens(uint256,uint256,address[],address,uint256) returns(uint256[])']);
+export const ROUTER_ABI=new Interface(['function getAmountsOut(uint256,address[]) view returns(uint256[])','function swapExactTokensForTokens(uint256,uint256,address[],address,uint256) returns(uint256[])','function swapExactETHForTokens(uint256,address[],address,uint256) payable returns(uint256[])']);
 const FACTORY_ABI=new Interface(['function getPair(address,address) view returns(address)']);
 export const FALLBACK={factory:'0.0.9959',assetIn:'0.0.1183558',assetOut:'0.0.15058',decimalsIn:'6',decimalsOut:'8'} as const;
 /** A real testnet pool quote. It never authorizes or represents a swap. */
