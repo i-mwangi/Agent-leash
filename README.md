@@ -5,9 +5,8 @@ A Scaffold-HBAR template for an agent wallet with guardian revocation, client-en
 ## Scaffold and run
 
 ```sh
-npm create scaffold-hbar@latest --template i-mwangi/Agent-leash
+npm create scaffold-hbar@latest -- Agent-leash --template i-mwangi/Agent-leash --solidity-framework hardhat --package-manager npm --skip-hedera-skills
 cd Agent-leash
-npm install
 npm run check
 npm run dev
 ```
@@ -52,18 +51,18 @@ The Policy tab has optional browser-wallet controls for pause, unpause and revok
 
 These are **testnet writes** from one local deployment on 25 September 2026, separate from the demo and local contract execution.
 
-| Item | Evidence |
-| --- | --- |
-| Guardian account `0.0.10715881` | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349018.352739409) |
-| 1-of-2 agent account `0.0.10715883` | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349024.163447892) |
-| HCS topic `0.0.10715890` | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349046.149672625), [UAID message](https://hashscan.io/testnet/transaction/0.0.5792828%401790349056.243185055) |
-| Policy contract `0.0.10715941` | [deployment](https://hashscan.io/testnet/transaction/0.0.5792828%401790349205.179484212), [allowlist](https://hashscan.io/testnet/transaction/0.0.10715881%401790349210.300763930) |
-| ERC-8004 agent `121` | [registration](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [card update](https://hashscan.io/testnet/transaction/0.0.5792828%401790349280.300460069) |
-| Token associations | [USDC](https://hashscan.io/testnet/transaction/0.0.10715883%401790349220.774920691), [WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790349224.140844625) |
-| x402 paid standing | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790350541.346608081), operator `0.0.5792828` → agent `0.0.10715883` |
-| Guardian pause/unpause | [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351849.434983179), [unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351875.376849531) |
-| Guardian revocation | [key update](https://hashscan.io/testnet/transaction/0.0.10715881%401790351896.589395734), [HCS rotated event](https://hashscan.io/testnet/transaction/0.0.10715881%401790351899.146336845) |
-| Standing after revocation | [second USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790351936.882024325); verified EIP-712 report returned `agentKeyActive: false` |
+| Item                                | Evidence                                                                                                                                                                                    |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guardian account `0.0.10715881`     | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349018.352739409)                                                                                                      |
+| 1-of-2 agent account `0.0.10715883` | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349024.163447892)                                                                                                      |
+| HCS topic `0.0.10715890`            | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349046.149672625), [UAID message](https://hashscan.io/testnet/transaction/0.0.5792828%401790349056.243185055)          |
+| Policy contract `0.0.10715941`      | [deployment](https://hashscan.io/testnet/transaction/0.0.5792828%401790349205.179484212), [allowlist](https://hashscan.io/testnet/transaction/0.0.10715881%401790349210.300763930)          |
+| ERC-8004 agent `121`                | [registration](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [card update](https://hashscan.io/testnet/transaction/0.0.5792828%401790349280.300460069)       |
+| Token associations                  | [USDC](https://hashscan.io/testnet/transaction/0.0.10715883%401790349220.774920691), [WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790349224.140844625)                   |
+| x402 paid standing                  | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790350541.346608081), operator `0.0.5792828` → agent `0.0.10715883`                                          |
+| Guardian pause/unpause              | [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351849.434983179), [unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351875.376849531)                |
+| Guardian revocation                 | [key update](https://hashscan.io/testnet/transaction/0.0.10715881%401790351896.589395734), [HCS rotated event](https://hashscan.io/testnet/transaction/0.0.10715881%401790351899.146336845) |
+| Standing after revocation           | [second USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790351936.882024325); verified EIP-712 report returned `agentKeyActive: false`                              |
 
 `npm run agent -- status` reads and cross-checks the mirror account key, HCS publishers/events, registry owner/card, and guardian policy. These public IDs are examples, not fresh-scaffold defaults.
 
@@ -83,13 +82,13 @@ The card's default standing endpoint is `localhost:3001`, for local development 
 
 `npm run check` runs lint, TypeScript, 35 deterministic unit/integration tests, one local Solidity execution test, and production builds. Tests do not require funded accounts. Live evidence above was checked separately with testnet receipts and mirror reads. The public template was scaffolded again after the MCP/dashboard changes; `npm ci` and the full check passed in that fresh checkout.
 
-| Package | Role |
-| --- | --- |
-| `packages/agent` | CLI, key-isolated setup, policy guard, swap adapter, guardian actions |
-| `packages/shared` | Mirror/HCS readers, identity validation, UAID, SQLite state |
-| `packages/server` | Hono API, x402 settlement, signed standing |
-| `packages/contracts` | Guardian-owned policy configuration |
-| `packages/nextjs` | Local interactive demo |
+| Package              | Role                                                                  |
+| -------------------- | --------------------------------------------------------------------- |
+| `packages/agent`     | CLI, key-isolated setup, policy guard, swap adapter, guardian actions |
+| `packages/shared`    | Mirror/HCS readers, identity validation, UAID, SQLite state           |
+| `packages/server`    | Hono API, x402 settlement, signed standing                            |
+| `packages/contracts` | Guardian-owned policy configuration                                   |
+| `packages/nextjs`    | Local interactive demo                                                |
 
 Sources: [bounty brief](https://hedera.com/blog/scaffold-hbar-template-bounty/), [Scaffold-HBAR CLI](https://github.com/hedera-dev/create-scaffold-hbar), [Hedera SDK deployment guide](https://hedera.com/blog/how-to-deploy-smart-contracts-on-hedera-part-1-a-simple-getter-and-setter-contract/), [SaucerSwap contracts](https://docs.saucerswap.finance/developers/contracts.md), [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004), [Blocky402 API](https://blocky402.com/docs/api-reference/).
 
