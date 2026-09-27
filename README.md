@@ -5,15 +5,15 @@ A Scaffold-HBAR template for an agent wallet with guardian revocation, client-en
 ## Scaffold and run
 
 ```sh
-npm create scaffold-hbar@latest -- Agent-leash --template i-mwangi/Agent-leash --solidity-framework hardhat --package-manager npm --skip-hedera-skills
-cd Agent-leash
+npm create scaffold-hbar@latest -- agent-leash --template i-mwangi/Agent-leash --frontend nextjs-app --solidity-framework hardhat --network testnet --package-manager npm --skip-hedera-skills --ci
+cd agent-leash
 npm run check
 npm run dev
 ```
 
 Use Node 22.13+ (Node 24 recommended). The dashboard at `http://localhost:3000` is an explicitly synthetic local demo. The API runs at `http://127.0.0.1:3001`.
 
-The published `i-mwangi/Agent-leash#main` template was fetched with `create-scaffold-hbar@0.4.0`; `npm ci` and `npm run check` passed in that fresh scaffold.
+The published `i-mwangi/Agent-leash#main` template was fetched with the current `create-scaffold-hbar@latest` CLI; `npm ci` and `npm run check` passed in that fresh scaffold. Current CLI releases require lowercase project names and explicit noninteractive options for automated installation.
 
 For a **new testnet deployment**, copy `.env.operator.example` to `.env.operator`, set a funded `HEDERA_OPERATOR_ID` and `HEDERA_OPERATOR_KEY` locally, then run:
 
@@ -45,7 +45,7 @@ New deployments use the live SaucerSwap V1 SAUCE → WHBAR testnet pool. For an 
 
 `npm run agent -- mcp` starts a local stdio MCP server with `link_account`, `check_policy`, and `record_outcome`. Run it in the repository directory with the isolated agent environment present. `link_account` verifies the account and stores a local ignored binding; `check_policy` is advisory; `record_outcome` checks mirror evidence before writing an HCS fill. The dashboard exposes live identity, policy and pool quote data in testnet mode. Demo switches and sample metrics remain labelled simulations.
 
-The Policy tab has optional browser-wallet controls for pause, unpause and revoke. Put a public Reown/WalletConnect project ID in ignored `packages/nextjs/.env.local` as `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...`, restart Next.js, and connect a Hedera testnet wallet that controls the configured guardian account. The UI checks the connected account ID, asks that wallet to sign, checks the transaction on the mirror, and then asks it to publish a guardian HCS event. No guardian private key is sent to the dashboard or API. A HashPack browser session signed a testnet pause contract call, and the policy became paused; its follow-up HCS submission was not observed, so the browser flow is not yet verified end to end. The UI reports this partial state and offers an HCS retry while the page remains open. If the page was reloaded, `npm run agent -- reconcile-pause GUARDIAN_PAUSE_TXID` verifies the guardian payer, successful call to this deployment's policy contract, exact `pause()` function, current paused state, and absence of an HCS record before signing only the missing HCS event with the local ignored guardian key. It does not repeat the contract call. The CLI guardian actions remain the verified live path. HashPack's published WalletConnect transaction list does not include Account Update, so browser revocation remains unverified.
+The Policy tab has optional browser-wallet controls for pause and unpause. Put a public Reown/WalletConnect project ID in ignored `packages/nextjs/.env.local` as `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...`, restart Next.js, and connect a Hedera testnet wallet that controls the configured guardian account. The UI checks the connected account ID, asks that wallet to sign, checks the transaction on the mirror, and then asks it to publish a guardian HCS event. No guardian private key is sent to the dashboard or API. A HashPack browser session signed a testnet pause contract call, and the policy became paused; its follow-up HCS submission was not observed, so the browser flow is not yet verified end to end. The UI preserves the pending HCS record across a page reload and confirms the topic message on the mirror before reporting success. If browser signing is unavailable, `npm run agent -- reconcile-pause GUARDIAN_PAUSE_TXID` verifies the guardian payer, successful call to this deployment's policy contract, exact `pause()` function, current paused state, and absence of an HCS record before signing only the missing HCS event with the local ignored guardian key. It does not repeat the contract call. The CLI guardian actions remain the verified live path. HashPack's published WalletConnect transaction list does not include Account Update, so browser revocation is disabled; use the isolated CLI.
 
 ## Real testnet evidence
 
@@ -81,7 +81,7 @@ The card's default standing endpoint is `localhost:3001`, for local development 
 
 ## Validation
 
-`npm run check` runs lint, TypeScript, 35 deterministic unit/integration tests, one local Solidity execution test, and production builds. Tests do not require funded accounts. Live evidence above was checked separately with testnet receipts and mirror reads. The public template was scaffolded again after the MCP/dashboard changes; `npm ci` and the full check passed in that fresh checkout.
+`npm run check` runs lint, TypeScript, 39 deterministic unit/integration tests, one local Solidity execution test, and production builds. Tests do not require funded accounts. Live evidence above was checked separately with testnet receipts and mirror reads. The public template was scaffolded again with the current Scaffold-HBAR CLI; `npm ci` and the full check passed in that fresh checkout.
 
 | Package              | Role                                                                  |
 | -------------------- | --------------------------------------------------------------------- |
