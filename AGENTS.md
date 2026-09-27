@@ -9,5 +9,6 @@
 - The testnet registry `0x8004A818BFB912233c491871b3d84c89A494BD9e`, USDC `0.0.429274`, Blocky402 payment flow, and SaucerSwap SAUCE/WHBAR route have live evidence linked in README.md. Recheck deployed contracts, token decimals, and pool liquidity before new live writes.
 - Paid standing requires authoritative identity sources and independent mirror settlement confirmation. Keep the unconfigured route at unpaid 503; never substitute a mock 402 response for a working x402 integration.
 - Preserve the pinned raw-digest Hedera signing and offline EIP-712 standing verification tests when changing transaction or report formats.
+- The guardian-approved HCS agreement is a structured technical policy record. Version 2 standing binds its hash and version; neither it nor the native account enforces recipient or daily caps against an agent bypassing the client. Never present it as proof of legal ownership.
 - Run `npm run check` after implementation changes. Keep local tests deterministic and independent of funded accounts.
 - Public template installation and real testnet evidence must be verified before marking the submission ready.

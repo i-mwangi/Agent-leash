@@ -1,6 +1,6 @@
 # Accountable Agent
 
-A Scaffold-HBAR template for one workflow: create a Hedera agent account with a human guardian, register its ERC-8004 identity and HCS-14 profile, then sell a signed standing check over x402. The supplied agent client also demonstrates a policy check immediately before its own spending signatures. A native 1-of-2 Hedera key **does not enforce caps or pause** against an agent that bypasses this client. SaucerSwap is an optional spending example, not a prerequisite for paid standing.
+A Scaffold-HBAR template for one workflow: create a Hedera agent account with a human guardian, register its ERC-8004 identity and HCS-14 profile, then sell a signed standing check over x402. The supplied agent client also demonstrates a policy check immediately before its own spending signatures. A guardian can approve a structured technical policy record whose signed hash is published to HCS and included in version 2 standing reports. This is not legal-ownership verification or an automatic law-to-code translator. A native 1-of-2 Hedera key **does not enforce caps or pause** against an agent that bypasses this client. SaucerSwap is an optional spending example, not a prerequisite for paid standing.
 
 ## Scaffold and run
 
@@ -20,16 +20,17 @@ For a judge-facing smoke check, run `npm run dev`, open `http://localhost:3000`,
 The scaffold itself takes one command. Creating an agent and accepting testnet payments still requires a funded operator account, local role keys, a testnet API process, and the steps below. For a **new testnet deployment**, copy `.env.operator.example` to `.env.operator`, set a funded `HEDERA_OPERATOR_ID` and `HEDERA_OPERATOR_KEY` locally, then run:
 
 ```sh
-npm run agent -- init
-npm run agent -- setup
-npm run agent -- register
+npm run agent -- onboard
+npm run agent -- approve-agreement
 npm run agent -- status
 npm run agent -- pay-standing
 ```
 
+`onboard` is resumable: it creates/verifies the guardian and 1-of-2 agent accounts, HCS topic and UAID, policy contract, and ERC-8004 registration, then writes ignored `.accountable/agreement-draft.json` and prints public IDs and links. **Read the draft before running `approve-agreement`.** That explicit command checks the draft against current on-chain caps and allowed asset, signs its deterministic hash with the isolated guardian key, and submits the signed record to the agent's HCS topic. It does not attest to legal ownership, enforce counterparty restrictions, or move custody into a constrained contract. The record covers the currently configured asset and per-transaction/per-UTC-day client limits; a later cap or asset change requires a new approval (`npm run agent -- draft-agreement`, then `approve-agreement`) before paid standing resumes. The previous `init`, `setup`, and `register` commands remain available individually for troubleshooting and older deployments. A stale local draft must be reviewed and removed or moved out of `.accountable` before regenerating it.
+
 Start the testnet API in a separate terminal before `pay-standing`: PowerShell: `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`; Bash: `APP_MODE=testnet npm run dev -w @accountable/server`. Start the dashboard separately with `npm run dev -w @accountable/web`. Startup verifies the account, HCS, registry, policy, facilitator support, and payment token association; it fails before serving if a required source is unavailable. The operator account must hold testnet USDC and the agent account must be associated with it.
 
-`GET /standing/:id` first returns an x402 challenge. After the Blocky402 settlement and an independent mirror confirmation of the exact HTS USDC transfer, it returns a 12-field EIP-712 signed standing report plus Hashscan account, topic, and policy links. The links are derived from signed fields and checked by the supplied verifier. The example buyer is the operator account with a $0.001 payment limit; this service cannot enforce an arbitrary buyer's local spend cap, pause, or guardian controls. Buyers need their own wallet/client policy for that. The agent's guardian pause lives in the Hedera policy contract, and key revocation is a Hedera account update; standing reports those facts even while paused or revoked.
+`GET /standing/:id` first returns an x402 challenge. After the Blocky402 settlement and an independent mirror confirmation of the exact HTS USDC transfer, it returns an EIP-712 signed standing report plus Hashscan account, topic, and policy links. Existing deployments without an agreement return the pinned 12-field version 1 report. Once a guardian-approved HCS record exists, version 2 also signs its hash and version. The supplied buyer rechecks that HCS record and the current contract policy against the signed report. The example buyer is the operator account with a $0.001 payment limit; this service cannot enforce an arbitrary buyer's local spend cap, pause, or guardian controls. Buyers need their own wallet/client policy for that. The agent's guardian pause lives in the Hedera policy contract, and key revocation is a Hedera account update; standing reports those facts even while paused or revoked.
 
 To demonstrate guardian control after paid standing, run `npm run agent -- pause`, `npm run agent -- unpause`, then `npm run agent -- revoke`. A fresh paid standing check after revocation reports the inactive agent key. Run the optional DEX example below **before** revocation if you want to try it with this same agent account.
 

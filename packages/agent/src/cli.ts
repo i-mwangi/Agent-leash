@@ -6,11 +6,15 @@ import { fallbackQuote, readFacts, quote } from '../../shared/src/sources';
 import { spend } from './spend';
 import { payStanding } from './payment';
 import { startMcp } from './mcp';
+import { onboard, prepareAgreement, approveAgreement } from './agreement';
 import { AppError, jsonSafe, uint } from '../../shared/src/model';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 const [command,...args]=process.argv.slice(2);
 async function main(){
+  if(command==='onboard') return onboard();
+  if(command==='draft-agreement') return prepareAgreement();
+  if(command==='approve-agreement') return approveAgreement();
   if(command==='init') return initialize();
   if(command==='adopt') {if(!args[0]) throw new AppError('PUBLIC_DEPLOYMENT_FILE_REQUIRED',400);return adoptExisting(args[0]);}
   if(command==='setup') return setup();
@@ -27,7 +31,7 @@ async function main(){
   if(command==='quote-fallback') return fallbackQuote(d,new Mirror(),BigInt(uint.parse(args[0])));
   if(command==='spend') return spend(BigInt(uint.parse(args[0])));
   if(command==='pay-standing') return payStanding();
-  throw new AppError('USAGE: init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | evidence',400);
+  throw new AppError('USAGE: onboard | draft-agreement | approve-agreement | init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | evidence',400);
 }
 if(command==='mcp') startMcp().catch(()=>{console.error('MCP_START_FAILED');process.exitCode=1;});
 else main().then(result=>console.log(JSON.stringify(jsonSafe(result),null,2))).catch(error=>{console.error(error instanceof AppError?error.code:error instanceof Error?error.message:'COMMAND_FAILED');process.exitCode=1;});

@@ -6,6 +6,7 @@ import { readDeployment } from '../../shared/src/files';
 import { AppError, PRICE, USDC } from '../../shared/src/model';
 import { Mirror, verifyTransfer } from '../../shared/src/mirror';
 import { signedStandingSchema, verifyStanding } from '../../shared/src/standing';
+import { readFacts } from '../../shared/src/sources';
 import { roleKey, writeEvidence } from './runtime';
 
 /** Operator-only test payer. The API process never receives this key. */
@@ -29,7 +30,9 @@ export async function payStanding() {
   const transaction=await mirror.waitTransaction(settlement.transaction);
   verifyTransfer(transaction,{txId:settlement.transaction,asset:USDC,payer:d.operatorId,payTo:d.agentAccount,amount:BigInt(PRICE)});
   const body=signedStandingSchema.parse(await response.json());
-  const report=verifyStanding(body,d.attestationAddress,d.policyAddress,d.agentAccount);
+  const facts=await readFacts(d,mirror);
+  if(Boolean(facts.agreement)!==(body.domain.version==='2')) throw new AppError('STANDING_AGREEMENT_MISMATCH');
+  const report=verifyStanding(body,d.attestationAddress,d.policyAddress,d.agentAccount,Math.floor(Date.now()/1000),facts.agreement);
   writeEvidence('x402-paid-standing',settlement.transaction);
   return {transactionId:settlement.transaction,report,links:body.links,verified:true};
 }

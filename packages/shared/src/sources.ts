@@ -4,6 +4,7 @@ import { AppError, evmAddress, type Deployment, type ConsensusEvent } from './mo
 import { accountKeyState } from './keys';
 import { agentData, createUaid } from './uaid';
 import type { PolicySnapshot } from '../../agent/src/policyClient';
+import { verifyAgreement } from './agreement';
 export const POLICY_ABI=new Interface(['function guardian() view returns(address)','function agentAccount() view returns(string)','function paused() view returns(bool)','function maxPerTx() view returns(uint256)','function maxPerDay() view returns(uint256)','function allowedTokens(string) view returns(bool)','function pause()','function unpause()','function setCaps(uint256,uint256)','function setAllowedTokens(string[],bool)']);
 export const IDENTITY_ABI=new Interface(['function register(string) returns(uint256)','function tokenURI(uint256) view returns(string)','function ownerOf(uint256) view returns(address)','function setAgentURI(uint256,string)','event Registered(uint256 indexed agentId,string agentURI,address indexed owner)']);
 export function makeCard(d:Deployment) {
@@ -11,7 +12,7 @@ export function makeCard(d:Deployment) {
 }
 export function cardUri(d:Deployment){return 'data:application/json;base64,'+Buffer.from(JSON.stringify(makeCard(d))).toString('base64');}
 export function resolvePublicId(d:Deployment,id:string){return [d.agentAccount,d.erc8004AgentId,d.uaid].includes(id);}
-export async function readFacts(d:Deployment,mirror:Mirror) {
+export async function readFacts(d:Deployment,mirror:Mirror,enforceAgreement=true) {
   if(!d.agentAccount || !d.hcsTopic || !d.policyAddress || !d.uaid || !d.erc8004AgentId || !d.guardianId) throw new AppError('IDENTITY_MISSING',409);
   const account=d.agentAccount,topic=d.hcsTopic,agentId=d.erc8004AgentId;
   const [accountInfo,allEvents,owner,uri,guardianInfo]=await Promise.all([
@@ -38,7 +39,20 @@ export async function readFacts(d:Deployment,mirror:Mirror) {
   if(String(owner[0]).toLowerCase()!==operator.evm_address.toLowerCase()) throw new AppError('REGISTRY_OWNER_MISMATCH');
   const [guardian,agent,paused,perTx,perDay]=await Promise.all(['guardian','agentAccount','paused','maxPerTx','maxPerDay'].map(method=>mirror.call(policy,POLICY_ABI,method)));
   if(String(guardian[0]).toLowerCase()!==guardianInfo.evm_address.toLowerCase() || agent[0]!==account) throw new AppError('POLICY_OWNER_MISMATCH');
-  return {account:accountInfo,events,card,policy,keyState,paused:Boolean(paused[0]),maxPerTx:BigInt(perTx[0]),maxPerDay:BigInt(perDay[0])};
+  let agreement: {hash:string;version:number}|undefined;
+  const recorded=latest('agreement');
+  if(recorded) {
+    if(recorded.publisher!==d.guardianId) throw new AppError('AGREEMENT_PUBLISHER_MISMATCH');
+    let signed;
+    try { signed=verifyAgreement(recorded.payload,guardianInfo.evm_address); }
+    catch { throw new AppError('AGREEMENT_SIGNATURE_INVALID'); }
+    const terms=signed.agreement;
+    if(enforceAgreement && (terms.agentAccount!==account || terms.guardianAccount!==d.guardianId || terms.policyContract.toLowerCase()!==policy.toLowerCase() || terms.spendAsset!==d.spendAsset || BigInt(terms.maxPerTx)!==BigInt(perTx[0]) || BigInt(terms.maxPerDay)!==BigInt(perDay[0]))) throw new AppError('AGREEMENT_POLICY_MISMATCH');
+    const allowed=await mirror.call(policy,POLICY_ABI,'allowedTokens',[terms.spendAsset]);
+    if(enforceAgreement && !allowed[0]) throw new AppError('AGREEMENT_POLICY_MISMATCH');
+    agreement={hash:signed.hash,version:terms.version};
+  }
+  return {account:accountInfo,events,card,policy,keyState,paused:Boolean(paused[0]),maxPerTx:BigInt(perTx[0]),maxPerDay:BigInt(perDay[0]),agreement};
 }
 export async function dailySpend(events:ConsensusEvent[],account:string,asset:string,mirror:Mirror,now=Date.now()) {
   let total=0n; const confirmed=new Set<string>(); const today=new Date(now).toISOString().slice(0,10);

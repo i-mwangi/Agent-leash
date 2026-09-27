@@ -23,7 +23,7 @@ const tabs = [
   "Optional DEX",
 ] as const;
 type Tab = (typeof tabs)[number];
-type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean};
+type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
 export default function Home() {
   const [tab, setTab] = useState<Tab>("Overview");
   const [paused, setPaused] = useState(false);
@@ -42,12 +42,12 @@ export default function Home() {
         const [d,s]=await Promise.all([fetch('/api/deployment'),fetch('/api/status')]);
         if(!d.ok || !s.ok) return;
         const deployment=await d.json(),status=await s.json();
-        let agentKeyActive: boolean|undefined,livePaused:boolean|undefined;
+        let agentKeyActive: boolean|undefined,livePaused:boolean|undefined,agreement:LiveView['agreement'];
         if(deployment.mode==='testnet' && deployment.configured){
           const a=await fetch('/api/agent/status');
-          if(a.ok){const facts=await a.json();agentKeyActive=facts.keyState?.agentKeyActive;livePaused=facts.paused;}
+          if(a.ok){const facts=await a.json();agentKeyActive=facts.keyState?.agentKeyActive;livePaused=facts.paused;agreement=facts.agreement;}
         }
-        if(mounted) setLive({mode:deployment.mode,deployment:deployment.deployment,status,agentKeyActive,paused:livePaused});
+        if(mounted) setLive({mode:deployment.mode,deployment:deployment.deployment,status,agentKeyActive,paused:livePaused,agreement});
       } catch { /* Local demo remains available when the API is offline. */ }
     })();
     return ()=>{mounted=false;};
@@ -174,6 +174,7 @@ export default function Home() {
             <h2>Live testnet status</h2>
             <p>Agent: <code>{live.deployment?.agentAccount??'not configured'}</code> · Guardian: <code>{live.deployment?.guardianId??'not configured'}</code></p>
             <p>Key: {live.agentKeyActive===undefined?'unavailable':live.agentKeyActive?'agent active':'guardian-only'} · Policy: {live.paused===undefined?'unavailable':live.paused?'paused':'active'}</p>
+            <p>Guardian policy record: {live.agreement?<><code>v{live.agreement.version}</code> · <code>{live.agreement.hash}</code> · <a href={`https://hashscan.io/testnet/topic/${live.deployment?.hcsTopic}`} target="_blank" rel="noreferrer">HCS topic</a></>:'not approved for this deployment'}</p>
             <p>{live.status?.milestones?.map(item=>`${item.name}: ${item.ready?'ready':'pending'}`).join(' · ')}</p>
           </section>}
           <section className="agent-card">
@@ -357,11 +358,11 @@ export default function Home() {
                 </li>
               </ol>
               <div className="notice">
-                {live?.deployment?.agentAccount?<>Live account <a href={`https://hashscan.io/testnet/account/${live.deployment.agentAccount}`} target="_blank" rel="noreferrer">{live.deployment.agentAccount}</a> is deployed. The browser never receives its keys.</>:'Run the isolated CLI setup to create a live testnet account; this page does not hold spend keys.'}
+                {live?.deployment?.agentAccount?<>Live account <a href={`https://hashscan.io/testnet/account/${live.deployment.agentAccount}`} target="_blank" rel="noreferrer">{live.deployment.agentAccount}</a> is deployed. The browser never receives its keys.</>:'Run npm run agent -- onboard in the isolated CLI to create a live testnet account; review its agreement draft before approving. This page does not hold spend keys.'}
               </div>
             </section>
           )}
-          {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void fetch('/api/agent/status').then(async response=>{if(!response.ok)return;const facts=await response.json();setLive(current=>current?{...current,agentKeyActive:facts.keyState?.agentKeyActive,paused:facts.paused}:current);}).catch(()=>{});}}/></section>}
+          {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void fetch('/api/agent/status').then(async response=>{if(!response.ok)return;const facts=await response.json();setLive(current=>current?{...current,agentKeyActive:facts.keyState?.agentKeyActive,paused:facts.paused,agreement:facts.agreement}:current);}).catch(()=>{});}}/></section>}
           {tab === "Register" && (
             <section className="panel detail">
               <h2>Identity that other agents can verify</h2>
@@ -393,7 +394,7 @@ export default function Home() {
               </p>
               <code>GET /standing/:id</code>
               <div className="notice">
-                {live?.mode==='testnet' && live.deployment?.agentAccount?<>The live endpoint returns an x402 payment challenge. Run <code>npm run agent -- pay-standing</code> from the isolated CLI to pay and verify the report.</>:'In demo mode, standing remains unavailable; no payment is requested.'}
+                {live?.mode==='testnet' && live.deployment?.agentAccount?<>The live endpoint returns an x402 payment challenge. Run <code>npm run agent -- pay-standing</code> from the isolated CLI to pay and verify the report. A guardian-approved HCS policy record, when present, is bound to the version 2 standing signature.</>:'In demo mode, standing remains unavailable; no payment is requested.'}
               </div>
             </section>
           )}

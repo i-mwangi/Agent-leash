@@ -27,6 +27,6 @@ export function loadLiveServices():LiveServices|null {
   const ready=async(id:string)=>{if(!resolvePublicId(d,id)) throw new AppError('AGENT_NOT_FOUND',404); return readFacts(d,mirror);};
   return {deployment:d,mirror,payments,ready,report:async(id:string)=>{
     const facts=await ready(id); const issuedAt=Math.floor(Date.now()/1000);
-    return signStanding({publicId:`eip155:296:${d.registry}:${d.erc8004AgentId}`,hederaAccount:d.agentAccount!,erc8004AgentId:d.erc8004AgentId!,uaid:d.uaid!,paused:facts.paused,agentKeyActive:facts.keyState.agentKeyActive,maxPerTx:facts.maxPerTx.toString(),maxPerDay:facts.maxPerDay.toString(),hcsTopic:d.hcsTopic!,hashscanAccount:`https://hashscan.io/testnet/account/${d.agentAccount}`,issuedAt,expiresAt:issuedAt+120},facts.policy,wallet);
+    return signStanding({publicId:`eip155:296:${d.registry}:${d.erc8004AgentId}`,hederaAccount:d.agentAccount!,erc8004AgentId:d.erc8004AgentId!,uaid:d.uaid!,paused:facts.paused,agentKeyActive:facts.keyState.agentKeyActive,maxPerTx:facts.maxPerTx.toString(),maxPerDay:facts.maxPerDay.toString(),hcsTopic:d.hcsTopic!,hashscanAccount:`https://hashscan.io/testnet/account/${d.agentAccount}`,issuedAt,expiresAt:issuedAt+120,...(facts.agreement?{agreementHash:facts.agreement.hash,agreementVersion:facts.agreement.version}:{})},facts.policy,wallet);
   }};
 }

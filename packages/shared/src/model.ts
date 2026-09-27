@@ -18,7 +18,7 @@ export const deploymentSchema = z.object({
 });
 export type Deployment = z.infer<typeof deploymentSchema>;
 export const eventSchema = z.object({
-  v: z.literal(1), type: z.enum(['created','uaid','registered','policy','paused','unpaused','rotated','fill']),
+  v: z.literal(1), type: z.enum(['created','uaid','registered','policy','agreement','paused','unpaused','rotated','fill']),
   ts: z.string().datetime(), agentAccount: entityId, payload: z.record(z.unknown()),
 });
 export type ProfileEvent = z.infer<typeof eventSchema>;
