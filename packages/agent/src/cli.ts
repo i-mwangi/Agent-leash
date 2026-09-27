@@ -1,4 +1,5 @@
 import { setup, register, guardianAction, initialize, adoptExisting, configureDex, fundDex } from './setup';
+import { reconcilePause } from './reconcile';
 import { readDeployment, DATA } from '../../shared/src/files';
 import { Mirror } from '../../shared/src/mirror';
 import { fallbackQuote, readFacts, quote } from '../../shared/src/sources';
@@ -15,6 +16,7 @@ async function main(){
   if(command==='setup') return setup();
   if(command==='register') return register();
   if(command==='pause'||command==='unpause'||command==='revoke'||command==='restore') return guardianAction(command);
+  if(command==='reconcile-pause') {if(!args[0]) throw new AppError('TRANSACTION_ID_REQUIRED',400);return reconcilePause(args[0]);}
   if(command==='configure-dex') return configureDex();
   if(command==='fund-dex') return fundDex(BigInt(uint.parse(args[0])));
   if(command==='caps') return guardianAction('caps',[BigInt(uint.parse(args[0])),BigInt(uint.parse(args[1]))]);
@@ -25,7 +27,7 @@ async function main(){
   if(command==='quote-fallback') return fallbackQuote(d,new Mirror(),BigInt(uint.parse(args[0])));
   if(command==='spend') return spend(BigInt(uint.parse(args[0])));
   if(command==='pay-standing') return payStanding();
-  throw new AppError('USAGE: init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | pause | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | evidence',400);
+  throw new AppError('USAGE: init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | evidence',400);
 }
 if(command==='mcp') startMcp().catch(()=>{console.error('MCP_START_FAILED');process.exitCode=1;});
 else main().then(result=>console.log(JSON.stringify(jsonSafe(result),null,2))).catch(error=>{console.error(error instanceof AppError?error.code:error instanceof Error?error.message:'COMMAND_FAILED');process.exitCode=1;});
