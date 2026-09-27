@@ -13,7 +13,9 @@ npm run dev
 
 Use Node 22.13+ (Node 24 recommended). `npm run dev` launches the explicitly synthetic local demo at `http://localhost:3000` with its API at `http://127.0.0.1:3001`. Stop it before starting the testnet API below.
 
-The published `i-mwangi/Agent-leash#main` template was fetched with the current `create-scaffold-hbar@latest` CLI; `npm ci` and `npm run check` passed in that fresh scaffold. Current CLI releases require lowercase project names and explicit noninteractive options for automated installation.
+The published `i-mwangi/Agent-leash#main` template was fetched with the current `create-scaffold-hbar@latest` CLI; dependency installation and `npm run check` passed in a fresh scaffold. On npm 11.2.0, use the `--` separator shown above: without it, npm consumes `--template` and the CLI mistakes `i-mwangi/Agent-leash` for a project name. The project name must be lowercase. The bounty brief's shorter command did not scaffold on this npm version; the command above did.
+
+For a judge-facing smoke check, run `npm run dev`, open `http://localhost:3000`, and request `http://127.0.0.1:3001/health` and `/status`; the page and both API routes should return 200 in demo mode. Before testnet setup, `/standing/:id` deliberately returns unpaid 503 because its authoritative identity and payment sources are not configured. The separate testnet steps below turn that endpoint into a real 402 challenge followed by paid standing.
 
 The scaffold itself takes one command. Creating an agent and accepting testnet payments still requires a funded operator account, local role keys, a testnet API process, and the steps below. For a **new testnet deployment**, copy `.env.operator.example` to `.env.operator`, set a funded `HEDERA_OPERATOR_ID` and `HEDERA_OPERATOR_KEY` locally, then run:
 
