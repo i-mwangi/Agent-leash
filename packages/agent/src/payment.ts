@@ -5,7 +5,7 @@ import { createClientHederaSigner } from '@x402/hedera';
 import { readDeployment } from '../../shared/src/files';
 import { AppError, PRICE, USDC } from '../../shared/src/model';
 import { Mirror, verifyTransfer } from '../../shared/src/mirror';
-import { verifyStanding } from '../../shared/src/standing';
+import { signedStandingSchema, verifyStanding } from '../../shared/src/standing';
 import { roleKey, writeEvidence } from './runtime';
 
 /** Operator-only test payer. The API process never receives this key. */
@@ -28,8 +28,8 @@ export async function payStanding() {
   if(!settlement.success || settlement.network!=='hedera:testnet' || settlement.payer!==d.operatorId) throw new AppError('PAYMENT_RESPONSE_INVALID');
   const transaction=await mirror.waitTransaction(settlement.transaction);
   verifyTransfer(transaction,{txId:settlement.transaction,asset:USDC,payer:d.operatorId,payTo:d.agentAccount,amount:BigInt(PRICE)});
-  const body=await response.json();
+  const body=signedStandingSchema.parse(await response.json());
   const report=verifyStanding(body,d.attestationAddress,d.policyAddress,d.agentAccount);
   writeEvidence('x402-paid-standing',settlement.transaction);
-  return {transactionId:settlement.transaction,report,verified:true};
+  return {transactionId:settlement.transaction,report,links:body.links,verified:true};
 }

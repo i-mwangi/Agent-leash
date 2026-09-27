@@ -1,7 +1,7 @@
 {
   "name": "accountable-agent",
   "version": "0.1.0",
-  "description": "Agent wallets with client-enforced policy and guardian revocation on Hedera.",
+  "description": "Create a guardian-controlled Hedera agent, register its identity, and sell signed standing over x402.",
   "create-scaffold-hbar": {
     "requirements": { "node": ">=22.13.0" },
     "capabilities": {

@@ -12,20 +12,26 @@ export const STANDING_TYPES = { Standing: [
 ] };
 export const standingMessageSchema = z.object({ publicId:z.string(), hederaAccount:entityId, erc8004AgentId:uint, uaid:z.string().startsWith('uaid:aid:'), paused:z.boolean(), agentKeyActive:z.boolean(), maxPerTx:uint, maxPerDay:uint, hcsTopic:entityId, hashscanAccount:z.string().url(), issuedAt:z.number().int().nonnegative(), expiresAt:z.number().int().positive() }).strict();
 export type StandingMessage = z.infer<typeof standingMessageSchema>;
+const standingLinksSchema=z.object({account:z.string().url(),topic:z.string().url(),policy:z.string().url()}).strict();
 export const signedStandingSchema = z.object({
   domain: z.object({name:z.literal('AccountableAgentStanding'),version:z.literal('1'),chainId:z.literal(296),verifyingContract:address}).strict(),
-  message:standingMessageSchema, signature:z.string().regex(/^0x[\da-fA-F]{130}$/), signer:address,
+  message:standingMessageSchema, signature:z.string().regex(/^0x[\da-fA-F]{130}$/), signer:address, links:standingLinksSchema,
 }).strict();
 export type SignedStanding = z.infer<typeof signedStandingSchema>;
 export function standingDomain(policy: string) { return {name:'AccountableAgentStanding' as const,version:'1' as const,chainId:296 as const,verifyingContract:getAddress(policy)}; }
+export function standingLinks(message:StandingMessage,policy:string) {
+  return {account:`https://hashscan.io/testnet/account/${message.hederaAccount}`,topic:`https://hashscan.io/testnet/topic/${message.hcsTopic}`,policy:`https://hashscan.io/testnet/contract/${getAddress(policy)}`};
+}
 export async function signStanding(message: StandingMessage, policy: string, wallet: Wallet): Promise<SignedStanding> {
   standingMessageSchema.parse(message);
   const domain = standingDomain(policy);
-  return { domain, message, signer:wallet.address, signature:await wallet.signTypedData(domain, STANDING_TYPES, message) };
+  return { domain, message, signer:wallet.address, signature:await wallet.signTypedData(domain, STANDING_TYPES, message), links:standingLinks(message,policy) };
 }
 export function verifyStanding(input: unknown, expectedSigner: string, expectedPolicy: string, expectedAccount: string, now = Math.floor(Date.now()/1000)) {
   const report = signedStandingSchema.parse(input);
   if (getAddress(report.domain.verifyingContract) !== getAddress(expectedPolicy) || report.message.hederaAccount !== expectedAccount) throw new Error('STANDING_SUBJECT_MISMATCH');
+  const links=standingLinks(report.message,expectedPolicy);
+  if(report.message.hashscanAccount!==links.account || Object.entries(links).some(([name,url])=>report.links[name as keyof typeof links]!==url)) throw new Error('STANDING_LINK_MISMATCH');
   if (report.message.issuedAt > now + 30 || report.message.expiresAt <= now || report.message.expiresAt <= report.message.issuedAt || report.message.expiresAt - report.message.issuedAt > 300) throw new Error('STANDING_EXPIRED_OR_INVALID_TIME');
   const recovered = verifyTypedData(report.domain, STANDING_TYPES, report.message, report.signature);
   if (getAddress(expectedSigner) !== recovered || getAddress(report.signer) !== recovered) throw new Error('STANDING_SIGNER_MISMATCH');

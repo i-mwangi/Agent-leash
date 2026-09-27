@@ -20,7 +20,7 @@ const tabs = [
   "Register",
   "Policy",
   "Standing",
-  "Spend",
+  "Optional DEX",
 ] as const;
 type Tab = (typeof tabs)[number];
 type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean};
@@ -186,7 +186,7 @@ export default function Home() {
                   Atlas <span className="badge">DEMO AGENT</span>
                 </div>
                 <p>
-                  Treasury assistant <span>·</span> SaucerSwap spend path
+                  Guardian-controlled wallet <span>·</span> paid standing
                 </p>
               </div>
             </div>
@@ -202,7 +202,7 @@ export default function Home() {
               <small>Simulated state</small>
             </div>
           </section>
-          {(tab === "Overview" || tab === "Policy" || tab === "Spend") && (
+          {(tab === "Overview" || tab === "Policy" || tab === "Optional DEX") && (
             <>
               <div className="metrics">
                 <article>
@@ -397,8 +397,8 @@ export default function Home() {
               </div>
             </section>
           )}
-          {tab === 'Spend' && live?.mode==='testnet' && <section className="panel detail">
-            <h2>SaucerSwap testnet route</h2>
+          {tab === 'Optional DEX' && live?.mode==='testnet' && <section className="panel detail">
+            <h2>Optional SaucerSwap testnet route</h2>
             <p>Inspect the live SAUCE → WHBAR V1 pool. The agent signs a swap through the isolated CLI after checking its policy; this quote button only reads the pool.</p>
             <button className="secondary" onClick={readFallback}>Read pool quote</button>
             {fallback && <p role="status">{fallback}</p>}
@@ -413,7 +413,7 @@ export default function Home() {
                 "Policy foundation",
                 "Account & identity",
                 "Paid standing",
-                "DEX & revocation",
+                "Guardian oversight",
               ].map((step, i) => (
                 <div key={step}>
                   <span
@@ -423,7 +423,7 @@ export default function Home() {
                   </span>
                   <strong>{step}</strong>
                   <small>
-                    {i===0?'Local implementation':i===1?'Testnet verified':i===2?'Paid testnet verified':'Read-only DEX fallback'}
+                    {i===0?'Local implementation':i===1?'Testnet verified':i===2?'Paid testnet verified':'Pause & key update verified'}
                   </small>
                 </div>
               ))}

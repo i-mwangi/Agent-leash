@@ -1,6 +1,6 @@
 # Accountable Agent
 
-A Scaffold-HBAR template for an agent wallet with guardian revocation, client-enforced spending policy, ERC-8004 identity, HCS profile, x402 standing, and a SaucerSwap V1 adapter. The supplied client checks policy immediately before signing. A native 1-of-2 Hedera key **does not enforce caps or pause** against an agent that bypasses this client.
+A Scaffold-HBAR template for one workflow: create a Hedera agent account with a human guardian, register its ERC-8004 identity and HCS-14 profile, then sell a signed standing check over x402. The supplied agent client also demonstrates a policy check immediately before its own spending signatures. A native 1-of-2 Hedera key **does not enforce caps or pause** against an agent that bypasses this client. SaucerSwap is an optional spending example, not a prerequisite for paid standing.
 
 ## Scaffold and run
 
@@ -11,11 +11,11 @@ npm run check
 npm run dev
 ```
 
-Use Node 22.13+ (Node 24 recommended). The dashboard at `http://localhost:3000` is an explicitly synthetic local demo. The API runs at `http://127.0.0.1:3001`.
+Use Node 22.13+ (Node 24 recommended). `npm run dev` launches the explicitly synthetic local demo at `http://localhost:3000` with its API at `http://127.0.0.1:3001`. Stop it before starting the testnet API below.
 
 The published `i-mwangi/Agent-leash#main` template was fetched with the current `create-scaffold-hbar@latest` CLI; `npm ci` and `npm run check` passed in that fresh scaffold. Current CLI releases require lowercase project names and explicit noninteractive options for automated installation.
 
-For a **new testnet deployment**, copy `.env.operator.example` to `.env.operator`, set a funded `HEDERA_OPERATOR_ID` and `HEDERA_OPERATOR_KEY` locally, then run:
+The scaffold itself takes one command. Creating an agent and accepting testnet payments still requires a funded operator account, local role keys, a testnet API process, and the steps below. For a **new testnet deployment**, copy `.env.operator.example` to `.env.operator`, set a funded `HEDERA_OPERATOR_ID` and `HEDERA_OPERATOR_KEY` locally, then run:
 
 ```sh
 npm run agent -- init
@@ -23,21 +23,26 @@ npm run agent -- setup
 npm run agent -- register
 npm run agent -- status
 npm run agent -- pay-standing
+```
+
+Start the testnet API in a separate terminal before `pay-standing`: PowerShell: `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`; Bash: `APP_MODE=testnet npm run dev -w @accountable/server`. Start the dashboard separately with `npm run dev -w @accountable/web`. Startup verifies the account, HCS, registry, policy, facilitator support, and payment token association; it fails before serving if a required source is unavailable. The operator account must hold testnet USDC and the agent account must be associated with it.
+
+`GET /standing/:id` first returns an x402 challenge. After the Blocky402 settlement and an independent mirror confirmation of the exact HTS USDC transfer, it returns a 12-field EIP-712 signed standing report plus Hashscan account, topic, and policy links. The links are derived from signed fields and checked by the supplied verifier. The example buyer is the operator account with a $0.001 payment limit; this service cannot enforce an arbitrary buyer's local spend cap, pause, or guardian controls. Buyers need their own wallet/client policy for that. The agent's guardian pause lives in the Hedera policy contract, and key revocation is a Hedera account update; standing reports those facts even while paused or revoked.
+
+To demonstrate guardian control after paid standing, run `npm run agent -- pause`, `npm run agent -- unpause`, then `npm run agent -- revoke`. A fresh paid standing check after revocation reports the inactive agent key. Run the optional DEX example below **before** revocation if you want to try it with this same agent account.
+
+The **optional SaucerSwap spending example** uses:
+
+```sh
 npm run agent -- quote 1000
 npm run agent -- fund-dex 100000000
 npm run agent -- spend 1000000
-npm run agent -- pause
-npm run agent -- unpause
-npm run agent -- revoke
-npm run agent -- pay-standing
 ```
 
 The CLI creates separate ignored `.env.agent`, `.env.guardian`, and `.env.server` files. Never commit keys or load spend keys in the server. Amounts are raw smallest units: testnet USDC `0.0.429274` and SAUCE `0.0.1183558` each have six decimals, so `1000` is 0.001 USDC and `1000000` is 1 SAUCE. `fund-dex 100000000` uses up to 1 HBAR from the operator to buy testnet SAUCE for the agent through SaucerSwap; it is a separate funding trade, not the policy-gated agent spend. Check the live quote and available operator HBAR before running it. Setup is resumable; a successful transaction whose local result was interrupted requires manual reconciliation rather than a duplicate write.
 
 To reattach an existing deployment after re-scaffolding, copy the four ignored role environment files locally and keep the old public `.accountable/deployment.json` outside the new project. Run `npm run agent -- adopt /path/to/old/deployment.json` **instead of `init`**. The command verifies all four public keys, the account, HCS, registry, and policy against the mirror before saving local state; it creates no Hedera account. Do not put the private environment files in GitHub.
 This path was exercised from another fresh public scaffold against the already revoked testnet agent `0.0.10719538`; it recovered the existing deployment without submitting a transaction.
-
-Start the testnet API in a separate terminal before `pay-standing`: PowerShell: `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`; Bash: `APP_MODE=testnet npm run dev -w @accountable/server`. Startup verifies the account, HCS, registry, policy, facilitator support, and payment token association; it fails before serving if a required source is unavailable. The operator account must hold testnet USDC and the agent account must be associated with it.
 
 The spend command serializes requests, reserves the raw amount durably before submission, checks mirror-backed account/HCS/registry/policy/balance sources immediately before signing, and confirms the router call and token amounts before publishing a fill. Uncertain submissions stay reserved; a mirror-confirmed failed swap is recorded to HCS and released. Guardian `revoke` updates the account to a guardian-only key. It cannot undo prior spending. Run revoke after the intended agent spends; `restore` deliberately re-enables agent signing through a new guardian-approved key update.
 
@@ -60,6 +65,7 @@ These are **testnet writes** from one local deployment on 25–27 September 2026
 | ERC-8004 agent `121`                | [registration](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [card update](https://hashscan.io/testnet/transaction/0.0.5792828%401790349280.300460069)       |
 | Token associations                  | [USDC](https://hashscan.io/testnet/transaction/0.0.10715883%401790349220.774920691), [WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790349224.140844625)                   |
 | x402 paid standing                  | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790350541.346608081), operator `0.0.5792828` → agent `0.0.10715883`                                          |
+| Paid standing with evidence links   | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790502158.010293147); the signed report and derived account/topic/policy links passed the supplied client verifier |
 | Guardian pause/unpause              | [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351849.434983179), [unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351875.376849531)                |
 | Browser pause and HCS recovery      | [HashPack-signed pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790473656.056565005), [guardian HCS record](https://hashscan.io/testnet/transaction/0.0.10715881%401790475981.763264663) |
 | Browser wallet HCS retry            | [HashPack-signed pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790500372.264324397), [HashPack-signed HCS event](https://hashscan.io/testnet/transaction/0.0.10715881%401790501022.616111836); topic `0.0.10715890` records the pause transaction ID |

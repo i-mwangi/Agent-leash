@@ -41,7 +41,9 @@ describe('identity and signing',()=>{
     const policy='0x'+'2'.padStart(40,'0'); const signed=await signStanding(message,policy,wallet);
     expect(signed.signature).toBe('0x73f2a806f1319a2fae3ef98fa0f71ba4b4ff1de5b3055474831f0e635ead2fae2d9c2287b8246472966d3239e9070690eb1d3cf54519e3bc8b0210ca2ae46a261c');
     expect(STANDING_TYPES.Standing).toHaveLength(12);
+    expect(signed.links).toEqual({account:'https://hashscan.io/testnet/account/0.0.123',topic:'https://hashscan.io/testnet/topic/0.0.456',policy:`https://hashscan.io/testnet/contract/${policy}`});
     expect(verifyStanding(signed,wallet.address,policy,'0.0.123',1700000001)).toEqual(message);
+    expect(()=>verifyStanding({...signed,links:{...signed.links,topic:'https://example.com/topic'}},wallet.address,policy,'0.0.123',1700000001)).toThrow('LINK_MISMATCH');
     expect(()=>verifyStanding(signed,wallet.address,policy,'0.0.123',1700000120)).toThrow('EXPIRED');
     expect(()=>verifyStanding({...signed,message:{...message,maxPerTx:'999'}},wallet.address,policy,'0.0.123',1700000001)).toThrow('SIGNER');
     expect(()=>verifyStanding(signed,wallet.address,policy,'0.0.124',1700000001)).toThrow('SUBJECT');
