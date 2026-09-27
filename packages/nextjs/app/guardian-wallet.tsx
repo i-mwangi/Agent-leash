@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react';
 
 type Deployment={agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string};
+type PendingEvent={action:'pause'|'unpause'|'revoke';transactionId:string;message:string};
 type WalletConnector=import('@hashgraph/hedera-wallet-connect').DAppConnector;
 const PROJECT_ID=process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
 
@@ -11,10 +12,11 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
   const [account,setAccount]=useState<string|null>(null);
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
+  const [pending,setPending]=useState<PendingEvent|null>(null);
   async function connect() {
     if(!PROJECT_ID || !deployment.guardianId) throw new Error('WalletConnect project ID or guardian account is missing');
     const [{DAppConnector,HederaJsonRpcMethod,HederaSessionEvent,HederaChainId},{LedgerId,AccountId}]=await Promise.all([import('@hashgraph/hedera-wallet-connect'),import('@hiero-ledger/sdk')]);
-    const instance=new DAppConnector({name:'Accountable Agent',description:'Guardian controls for Hedera testnet',url:window.location.origin,icons:[`${window.location.origin}/favicon.ico`]},LedgerId.TESTNET,PROJECT_ID,Object.values(HederaJsonRpcMethod),[HederaSessionEvent.AccountsChanged,HederaSessionEvent.ChainChanged],[HederaChainId.Testnet]);
+    const instance=new DAppConnector({name:'Accountable Agent',description:'Guardian controls for Hedera testnet',url:window.location.origin,icons:[`${window.location.origin}/icon.svg`]},LedgerId.TESTNET,PROJECT_ID,Object.values(HederaJsonRpcMethod),[HederaSessionEvent.AccountsChanged,HederaSessionEvent.ChainChanged],[HederaChainId.Testnet]);
     await instance.init({logger:'error'});
     await instance.openModal();
     instance.getSigner(AccountId.fromString(deployment.guardianId));
@@ -23,7 +25,7 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
   async function run(action:'pause'|'unpause'|'revoke') {
     if(!deployment.guardianId || !deployment.agentAccount || !deployment.policyContractId || !deployment.guardianPublicKey || !deployment.hcsTopic) throw new Error('Live deployment is incomplete');
     const instance=connector.current;if(!instance) throw new Error('Connect the guardian wallet first');
-    const [{AccountId,AccountUpdateTransaction,Client,ContractExecuteTransaction,Hbar,PublicKey,TopicMessageSubmitTransaction,TransactionId},{Interface,getBytes}]=await Promise.all([import('@hiero-ledger/sdk'),import('ethers')]);
+    const [{AccountId,AccountUpdateTransaction,Client,ContractExecuteTransaction,Hbar,PublicKey,TransactionId},{Interface,getBytes}]=await Promise.all([import('@hiero-ledger/sdk'),import('ethers')]);
     const signer=instance.getSigner(AccountId.fromString(deployment.guardianId));
     const client=Client.forTestnet();
     try {
@@ -46,23 +48,37 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
       }
       if(!confirmed) throw new Error(`Submitted ${transactionId}; mirror confirmation is pending`);
       const event={v:1,type:action==='revoke'?'rotated':action==='pause'?'paused':'unpaused',ts:new Date().toISOString(),agentAccount:deployment.agentAccount,payload:action==='revoke'?{agentKeyActive:false,transactionId}:{transactionId}};
-      const hcs=new TopicMessageSubmitTransaction().setTopicId(deployment.hcsTopic).setMessage(JSON.stringify(event));
-      hcs.setTransactionId(TransactionId.generate(deployment.guardianId)).setMaxTransactionFee(new Hbar(3)).freezeWith(client);
-      const hcsResponse=await signer.call(hcs);
-      setMessage(`${action} confirmed: ${transactionId}. HCS: ${hcsResponse.transactionId.toString()}`);
+      const record={action,transactionId,message:JSON.stringify(event)};
+      setPending(record);
       onConfirmed();
+      try {await publishEvent(record,signer,client);} catch(error) {throw new Error(`Contract action confirmed: ${transactionId}. HCS record pending: ${error instanceof Error?error.message:'unknown error'}`);}
     } finally {client.close();}
   }
-  async function perform(action:'connect'|'pause'|'unpause'|'revoke') {
+  async function publishEvent(record:PendingEvent,signer:ReturnType<WalletConnector['getSigner']>,client:import('@hiero-ledger/sdk').Client) {
+    if(!deployment.guardianId || !deployment.hcsTopic) throw new Error('Live deployment is incomplete');
+    const {Hbar,TopicMessageSubmitTransaction,TransactionId}=await import('@hiero-ledger/sdk');
+    const hcs=new TopicMessageSubmitTransaction().setTopicId(deployment.hcsTopic).setMessage(record.message);
+    hcs.setTransactionId(TransactionId.generate(deployment.guardianId)).setMaxTransactionFee(new Hbar(3)).freezeWith(client);
+    const hcsResponse=await signer.call(hcs);
+    setPending(null);
+    setMessage(`${record.action} confirmed: ${record.transactionId}. HCS: ${hcsResponse.transactionId.toString()}`);
+  }
+  async function retryEvent() {
+    if(!pending || !connector.current || !deployment.guardianId) throw new Error('No pending guardian event');
+    const {AccountId,Client}=await import('@hiero-ledger/sdk');
+    const client=Client.forTestnet();
+    try {await publishEvent(pending,connector.current.getSigner(AccountId.fromString(deployment.guardianId)),client);} finally {client.close();}
+  }
+  async function perform(action:'connect'|'pause'|'unpause'|'revoke'|'retry-hcs') {
     setBusy(true);setMessage('');
-    try{if(action==='connect') await connect();else await run(action);}catch(error){setMessage(error instanceof Error?error.message:'Wallet action failed');}finally{setBusy(false);}
+    try{if(action==='connect') await connect();else if(action==='retry-hcs') await retryEvent();else await run(action);}catch(error){setMessage(error instanceof Error?error.message:'Wallet action failed');}finally{setBusy(false);}
   }
   return <div className="notice">
     <strong>Connected guardian wallet</strong>
     <p>Testnet signing stays in your wallet. The connected account must be {deployment.guardianId??'the configured guardian'}.</p>
     {!PROJECT_ID?<p>Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in packages/nextjs/.env.local to enable wallet connection.</p>:<>
-      <button className="secondary" disabled={busy} onClick={()=>void perform('connect')}>{account?`Connected ${account}`:'Connect wallet'}</button>
-      {account&&<><button className="secondary" disabled={busy} onClick={()=>void perform('pause')}>Pause</button><button className="secondary" disabled={busy} onClick={()=>void perform('unpause')}>Unpause</button><button className="secondary" disabled={busy} onClick={()=>void perform('revoke')}>Revoke agent key</button></>}
+      <button className="secondary" disabled={busy||!!account} onClick={()=>void perform('connect')}>{account?`Connected ${account}`:'Connect wallet'}</button>
+      {account&&<><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('pause')}>Pause</button><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('unpause')}>Unpause</button><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('revoke')}>Revoke agent key</button>{pending&&<button className="secondary" disabled={busy} onClick={()=>void perform('retry-hcs')}>Retry HCS record</button>}</>}
     </>}
     {message&&<p role="status">{message}</p>}
   </div>;

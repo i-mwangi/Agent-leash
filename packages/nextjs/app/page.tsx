@@ -361,7 +361,7 @@ export default function Home() {
               </div>
             </section>
           )}
-          {tab === 'Policy' && live?.mode==='testnet' && live.deployment && <section className="panel detail"><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>window.location.reload()}/></section>}
+          {tab === 'Policy' && live?.mode==='testnet' && live.deployment && <section className="panel detail"><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void fetch('/api/agent/status').then(async response=>{if(!response.ok)return;const facts=await response.json();setLive(current=>current?{...current,agentKeyActive:facts.keyState?.agentKeyActive,paused:facts.paused}:current);}).catch(()=>{});}}/></section>}
           {tab === "Register" && (
             <section className="panel detail">
               <h2>Identity that other agents can verify</h2>
