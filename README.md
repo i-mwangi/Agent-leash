@@ -1,6 +1,6 @@
 # Accountable Agent
 
-A Scaffold-HBAR template for one workflow: create a Hedera agent account with a human guardian, register its ERC-8004 identity and HCS-14 profile, then sell a signed standing check over x402. The supplied agent client also demonstrates a policy check immediately before its own spending signatures. A guardian can approve a structured technical policy record whose signed hash is published to HCS and included in version 2 standing reports. This is not legal-ownership verification or an automatic law-to-code translator. A native 1-of-2 Hedera key **does not enforce caps or pause** against an agent that bypasses this client. SaucerSwap is an optional spending example, not a prerequisite for paid standing.
+A Scaffold-HBAR template for one workflow: create a Hedera agent account with a human guardian, register its ERC-8004 identity and HCS-14 profile, then sell a signed standing check over x402. The supplied agent client also demonstrates a policy check immediately before its own spending signatures. A guardian can approve a structured technical policy record whose signed hash is published to HCS and included in version 2 standing reports. This is not legal-ownership verification or a general-purpose law-to-code translator. A native 1-of-2 Hedera key **does not enforce caps or pause** against an agent that bypasses this client. An optional HBAR vault provides contract-enforced caps, recipient permissions, pause, and recovery for HBAR deposited into that vault. SaucerSwap remains an optional spending example, not a prerequisite for paid standing.
 
 ## Scaffold and run
 
@@ -33,6 +33,33 @@ Start the testnet API in a separate terminal before `pay-standing`: PowerShell: 
 `GET /standing/:id` first returns an x402 challenge. After the Blocky402 settlement and an independent mirror confirmation of the exact HTS USDC transfer, it returns an EIP-712 signed standing report plus Hashscan account, topic, and policy links. Existing deployments without an agreement return the pinned 12-field version 1 report. Once a guardian-approved HCS record exists, version 2 also signs its hash and version. The supplied buyer rechecks that HCS record and the current contract policy against the signed report. The example buyer is the operator account with a $0.001 payment limit; this service cannot enforce an arbitrary buyer's local spend cap, pause, or guardian controls. Buyers need their own wallet/client policy for that. The agent's guardian pause lives in the Hedera policy contract, and key revocation is a Hedera account update; standing reports those facts even while paused or revoked.
 
 To demonstrate guardian control after paid standing, run `npm run agent -- pause`, `npm run agent -- unpause`, then `npm run agent -- revoke`. A fresh paid standing check after revocation reports the inactive agent key. Run the optional DEX example below **before** revocation if you want to try it with this same agent account.
+
+### Optional contract-controlled HBAR vault
+
+The native agent account's client limits are advisory to the agent key. For **deposited HBAR only**, `GuardedHbarVault` independently checks a per-transaction cap, a UTC-day cap, the guardian's recipient list, pause state, and the active vault agent on every transfer. The guardian can pause, remove the vault agent, and recover remaining HBAR while paused. It does not control HBAR or HTS tokens left in the native account, and it does not establish legal ownership. This optional path is separate from paid standing and the SaucerSwap example.
+
+After onboarding, put precisely one sentence in a local text file (replace the address with an EVM address you control):
+
+```text
+No more than 0.01 HBAR per transaction and 0.05 HBAR per UTC day; only to 0xYOUR_40_HEX_CHARACTER_ADDRESS.
+```
+
+The constrained parser rejects other wording and amounts with more than eight decimal places; it never guesses from ambiguous prose. Then run:
+
+```sh
+npm run agent -- draft-vault-terms path/to/terms.txt
+# Review .accountable/vault-terms-draft.json before approval.
+npm run agent -- approve-vault-terms
+npm run agent -- deploy-vault
+npm run agent -- allow-vault-recipients
+npm run agent -- fund-vault 2000000
+npm run agent -- vault-spend 0xYOUR_40_HEX_CHARACTER_ADDRESS 1000000
+npm run agent -- vault-pause
+npm run agent -- vault-recover
+npm run agent -- vault-revoke
+```
+
+All amounts in these commands are tinybars: `1000000` is 0.01 HBAR. Funding is capped at 1 HBAR per command. `approve-vault-terms` signs the reviewed, account-bound technical terms with the isolated guardian key; `deploy-vault` anchors their hash in the vault contract. The operator pays deployment and funding costs. The contract's guardian controls require the guardian key. The agent's vault spend command reads mirror-backed rules immediately before signing; the contract checks them again even if a caller bypasses this client. Keep `.accountable/` and the role environment files out of GitHub. The CLI currently supports one local vault deployment at a time; use a new scaffold or carefully archive the ignored vault state before a separate deployment.
 
 The **optional SaucerSwap spending example** uses:
 
@@ -71,6 +98,7 @@ These are **testnet writes** from one local deployment on 25–27 September 2026
 | Paid standing with evidence links   | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790502158.010293147); the signed report and derived account/topic/policy links passed the supplied client verifier |
 | Guardian policy record              | [guardian-signed HCS publication](https://hashscan.io/testnet/transaction/0.0.10715881%401790534670.287987571) on topic `0.0.10715890`; version 1 hash `0xe88cb434742bcab8ff9606794b3bb4f26e27efe6c2101cd427d7374d03815c8f` |
 | Version 2 paid standing             | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790534853.007138227); the buyer verified the settlement, HCS policy record, current policy, and EIP-712 signature containing the same hash and version |
+| Optional HBAR vault                  | [contract `0.0.10748172`](https://hashscan.io/testnet/contract/0.0.10748172) anchors guardian-approved hash `0x2f3789592bb1eb1a39ab041d02527412e24ad26b4ef7d4d329efc847df0c14d7`; [guardian allowlist](https://hashscan.io/testnet/transaction/0.0.10715881%401790536453.749688714), [0.02 HBAR funding](https://hashscan.io/testnet/transaction/0.0.5792828%401790536476.459345908), [0.01 HBAR agent spend](https://hashscan.io/testnet/transaction/0.0.10715883%401790536487.595052999), [guardian pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790536502.671587111), [0.01 HBAR recovery](https://hashscan.io/testnet/transaction/0.0.10715881%401790536526.827710143), and [vault agent revocation](https://hashscan.io/testnet/transaction/0.0.10715881%401790536541.410582156). The mirror showed a 1,000,000-tinybar recipient credit on spend and a zero vault balance after recovery; a paused spend was rejected before signing. |
 | Guardian pause/unpause              | [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351849.434983179), [unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351875.376849531)                |
 | Browser pause and HCS recovery      | [HashPack-signed pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790473656.056565005), [guardian HCS record](https://hashscan.io/testnet/transaction/0.0.10715881%401790475981.763264663) |
 | Browser wallet HCS retry            | [HashPack-signed pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790500372.264324397), [HashPack-signed HCS event](https://hashscan.io/testnet/transaction/0.0.10715881%401790501022.616111836); topic `0.0.10715890` records the pause transaction ID |
@@ -94,7 +122,7 @@ The card's default standing endpoint is `localhost:3001`, for local development 
 
 ## Validation
 
-`npm run check` runs lint, TypeScript, 41 deterministic unit/integration tests, one local Solidity execution test, and production builds. Tests do not require funded accounts. Live evidence above was checked separately with testnet receipts and mirror reads. The public template was scaffolded again with the current Scaffold-HBAR CLI; dependency installation and the full check passed in that fresh checkout.
+`npm run check` runs lint, TypeScript, deterministic unit/integration tests, local Solidity execution tests, and production builds. Tests do not require funded accounts. Live evidence above was checked separately with testnet receipts and mirror reads. The previously published public template was scaffolded again with the current Scaffold-HBAR CLI; dependency installation and the full check passed in that fresh checkout. Re-run a fresh public scaffold after publishing this vault addition before treating it as independently verified from the published template.
 
 | Package              | Role                                                                  |
 | -------------------- | --------------------------------------------------------------------- |

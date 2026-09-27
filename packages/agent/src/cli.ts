@@ -1,6 +1,8 @@
 import { setup, register, guardianAction, initialize, adoptExisting, configureDex, fundDex } from './setup';
 import { reconcilePause } from './reconcile';
-import { readDeployment, DATA } from '../../shared/src/files';
+import { readDeployment, DATA, atomicJson } from '../../shared/src/files';
+import { compileVaultTerms, vaultTermsHash } from '../../shared/src/vaultTerms';
+import { approveVaultTerms, deployVault, vaultStatus, allowVaultRecipients, guardianVaultAction, recoverVault, fundVault, vaultSpend } from './vault';
 import { Mirror } from '../../shared/src/mirror';
 import { fallbackQuote, readFacts, quote } from '../../shared/src/sources';
 import { spend } from './spend';
@@ -15,6 +17,27 @@ async function main(){
   if(command==='onboard') return onboard();
   if(command==='draft-agreement') return prepareAgreement();
   if(command==='approve-agreement') return approveAgreement();
+  if(command==='draft-vault-terms') {
+    if(!args[0]) throw new AppError('TERMS_FILE_REQUIRED',400);
+    const d=readDeployment();
+    if(!d?.agentAccount || !d.guardianId) throw new AppError('SETUP_REQUIRED');
+    const terms=compileVaultTerms(readFileSync(resolve(args[0]),'utf8'));
+    const context={network:'hedera:testnet' as const,agentAccount:d.agentAccount,guardianAccount:d.guardianId};
+    const hash=vaultTermsHash(terms,context);
+    const draft=resolve(DATA,'vault-terms-draft.json');
+    atomicJson(draft,{context,terms,hash});
+    return {draft,context,terms,hash,note:'Review this local draft. It does not deploy or fund a vault.'};
+  }
+  if(command==='approve-vault-terms') return approveVaultTerms();
+  if(command==='deploy-vault') return deployVault();
+  if(command==='vault-status') return vaultStatus();
+  if(command==='allow-vault-recipients') return allowVaultRecipients();
+  if(command==='vault-pause') return guardianVaultAction('pause');
+  if(command==='vault-unpause') return guardianVaultAction('unpause');
+  if(command==='vault-revoke') return guardianVaultAction('revoke');
+  if(command==='vault-recover') return recoverVault();
+  if(command==='fund-vault') return fundVault(BigInt(uint.parse(args[0])));
+  if(command==='vault-spend') {if(!args[0]) throw new AppError('RECIPIENT_REQUIRED',400);return vaultSpend(args[0],BigInt(uint.parse(args[1])));}
   if(command==='init') return initialize();
   if(command==='adopt') {if(!args[0]) throw new AppError('PUBLIC_DEPLOYMENT_FILE_REQUIRED',400);return adoptExisting(args[0]);}
   if(command==='setup') return setup();
@@ -31,7 +54,7 @@ async function main(){
   if(command==='quote-fallback') return fallbackQuote(d,new Mirror(),BigInt(uint.parse(args[0])));
   if(command==='spend') return spend(BigInt(uint.parse(args[0])));
   if(command==='pay-standing') return payStanding();
-  throw new AppError('USAGE: onboard | draft-agreement | approve-agreement | init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | evidence',400);
+  throw new AppError('USAGE: onboard | draft-agreement | approve-agreement | draft-vault-terms FILE | approve-vault-terms | deploy-vault | vault-status | allow-vault-recipients | fund-vault TINYBARS | vault-spend RECIPIENT TINYBARS | vault-pause | vault-unpause | vault-revoke | vault-recover | init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | evidence',400);
 }
 if(command==='mcp') startMcp().catch(()=>{console.error('MCP_START_FAILED');process.exitCode=1;});
 else main().then(result=>console.log(JSON.stringify(jsonSafe(result),null,2))).catch(error=>{console.error(error instanceof AppError?error.code:error instanceof Error?error.message:'COMMAND_FAILED');process.exitCode=1;});
