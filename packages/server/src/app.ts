@@ -80,6 +80,11 @@ export function createApp(mode = "demo", services:()=>LiveServices|null=()=>null
     const facts=await live.ready(live.deployment.agentAccount??'');
     return c.json(jsonSafe(facts));
   });
+  app.get('/policy/snapshot',async c=>{
+    const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
+    const snapshot=await policySnapshot(live.deployment,live.mirror,()=>0n);
+    return c.json({asset:live.deployment.spendAsset,snapshot:jsonSafe(snapshot)});
+  });
   app.post('/policy/preview',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
     const {amount}=await c.req.json(); const parsed=uint.safeParse(amount);

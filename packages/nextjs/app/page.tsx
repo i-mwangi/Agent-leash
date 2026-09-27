@@ -23,7 +23,10 @@ const tabs = [
   "Optional DEX",
 ] as const;
 type Tab = (typeof tabs)[number];
-type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
+type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
+type Snapshot={balance:string;spentToday:string;maxPerTx:string;maxPerDay:string};
+const units=(value:string)=>BigInt(value).toLocaleString('en-US');
+function usagePercent(s:Snapshot){const cap=BigInt(s.maxPerDay);return cap===0n?0:Number((BigInt(s.spentToday)*100n)/cap);}
 export default function Home() {
   const [tab, setTab] = useState<Tab>("Overview");
   const [paused, setPaused] = useState(false);
@@ -35,17 +38,28 @@ export default function Home() {
   const [busy, setBusy] = useState(false);
   const [live,setLive]=useState<LiveView|null>(null);
   const [fallback,setFallback]=useState<string|null>(null);
+  const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
+  async function readSnapshot(){
+    try{const response=await fetch('/api/policy/snapshot');if(response.ok)setSnapshot((await response.json()).snapshot);}catch{/* Metrics stay unavailable. */}
+  }
   useEffect(()=>{
     let mounted=true;
     (async()=>{
       try {
-        const [d,s]=await Promise.all([fetch('/api/deployment'),fetch('/api/status')]);
-        if(!d.ok || !s.ok) return;
-        const deployment=await d.json(),status=await s.json();
+        const statusRequest=fetch('/api/status');
+        const d=await fetch('/api/deployment');
+        if(!d.ok) return;
+        const deployment=await d.json();
+        // Switch to testnet presentation immediately; slower live reads fill in below.
+        if(mounted && deployment.mode==='testnet') setLive({mode:deployment.mode,deployment:deployment.deployment});
+        const s=await statusRequest;
+        if(!s.ok) return;
+        const status=await s.json();
         let agentKeyActive: boolean|undefined,livePaused:boolean|undefined,agreement:LiveView['agreement'];
         if(deployment.mode==='testnet' && deployment.configured){
           const a=await fetch('/api/agent/status');
           if(a.ok){const facts=await a.json();agentKeyActive=facts.keyState?.agentKeyActive;livePaused=facts.paused;agreement=facts.agreement;}
+          if(mounted) void readSnapshot();
         }
         if(mounted) setLive({mode:deployment.mode,deployment:deployment.deployment,status,agentKeyActive,paused:livePaused,agreement});
       } catch { /* Local demo remains available when the API is offline. */ }
@@ -56,21 +70,31 @@ export default function Home() {
     setFallback('Checking testnet pool…');
     try{const response=await fetch('/api/dex/fallback-quote?amount=1000000');const data=await response.json();setFallback(response.ok?`Read-only quote: 1 SAUCE → ${Number(data.amountOut)/100000000} WHBAR. No transaction submitted.`:`Quote unavailable: ${data.error??response.status}`);}catch{setFallback('Quote unavailable: API offline');}
   }
+  const testnet=live?.mode==='testnet';
+  const policyAsset=testnet?live?.deployment?.spendAsset??'unavailable':'0.0.429274';
   async function preview() {
     setBusy(true);
     setResult(null);
     try {
-      const response = await fetch("/api/demo/policy/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          amount,
-          asset: "0.0.429274",
-          paused,
-          agentKeyActive: active,
-        }),
-      });
+      // Testnet reads the live policy contract and mirror; demo evaluates the local scenario.
+      const response = testnet
+        ? await fetch("/api/policy/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ amount }),
+          })
+        : await fetch("/api/demo/policy/preview", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              amount,
+              asset: policyAsset,
+              paused,
+              agentKeyActive: active,
+            }),
+          });
       const data = await response.json();
+      if (testnet && response.ok && data.snapshot) setSnapshot(data.snapshot);
       setResult(
         response.ok
           ? data
@@ -150,10 +174,12 @@ export default function Home() {
               <p className="subtitle">
                 {tab === "Overview"
                   ? "A clear view of identity, permissions, and the next action."
-                  : "Explore the accountable agent workflow in a safe local demo."}
+                  : testnet
+                    ? "Live view of this deployment on Hedera testnet."
+                    : "Explore the accountable agent workflow in a safe local demo."}
               </p>
             </div>
-            <button
+            {!testnet && <button
               className="secondary"
               disabled={busy}
               onClick={() => {
@@ -164,16 +190,16 @@ export default function Home() {
               }}
             >
               <RotateCcw size={15} /> Reset demo
-            </button>
+            </button>}
           </div>
           <div className="notice">
-            <span>{live?.mode==='testnet'?'TESTNET EVIDENCE':'DEMO WORKSPACE'}</span>{' '}
-            {live?.mode==='testnet'?'The live status panel reads the API. The switches and sample metrics remain simulations; the separate guardian wallet panel can request real testnet signatures.':'All account data is synthetic. Controls below simulate policy checks; no funds move.'}
+            <span>{testnet?'TESTNET':'DEMO WORKSPACE'}</span>{' '}
+            {testnet?'Everything on this page reads Hedera testnet through the local API. Guardian actions are signed in your own wallet; this page never holds a key.':'All account data is synthetic. Controls below simulate policy checks; no funds move.'}
           </div>
           {live?.mode==='testnet' && <section className="panel detail" aria-label="Live testnet status">
             <h2>Live testnet status</h2>
             <p>Agent: <code>{live.deployment?.agentAccount??'not configured'}</code> · Guardian: <code>{live.deployment?.guardianId??'not configured'}</code></p>
-            <p>Key: {live.agentKeyActive===undefined?'unavailable':live.agentKeyActive?'agent active':'guardian-only'} · Policy: {live.paused===undefined?'unavailable':live.paused?'paused':'active'}</p>
+            <p>Key: {live.agentKeyActive===undefined?'reading…':live.agentKeyActive?'agent active':'guardian-only'} · Policy: {live.paused===undefined?'reading…':live.paused?'paused':'active'}</p>
             <p>Guardian policy record: {live.agreement?<><code>v{live.agreement.version}</code> · <code>{live.agreement.hash}</code> · <a href={`https://hashscan.io/testnet/topic/${live.deployment?.hcsTopic}`} target="_blank" rel="noreferrer">HCS topic</a></>:'not approved for this deployment'}</p>
             <p>{live.status?.milestones?.map(item=>`${item.name}: ${item.ready?'ready':'pending'}`).join(' · ')}</p>
           </section>}
@@ -184,24 +210,41 @@ export default function Home() {
               </div>
               <div>
                 <div className="agent-name">
-                  Atlas <span className="badge">DEMO AGENT</span>
+                  {testnet ? live?.deployment?.name ?? "Agent" : "Atlas"}{" "}
+                  <span className="badge">{testnet ? "TESTNET AGENT" : "DEMO AGENT"}</span>
                 </div>
                 <p>
                   Guardian-controlled wallet <span>·</span> paid standing
                 </p>
               </div>
             </div>
-            <div className="agent-status">
-              <span
-                className={active && !paused ? "status-dot" : "status-dot off"}
-              />
-              {!active
-                ? "Key revoked locally"
-                : paused
-                  ? "Policy paused locally"
-                  : "Ready to preview"}
-              <small>Simulated state</small>
-            </div>
+            {testnet ? (
+              <div className="agent-status">
+                <span
+                  className={live?.agentKeyActive && !live.paused ? "status-dot" : "status-dot off"}
+                />
+                {live?.agentKeyActive === false
+                  ? "Agent key revoked"
+                  : live?.paused
+                    ? "Policy paused"
+                    : live?.agentKeyActive
+                      ? "Active"
+                      : "Reading live status…"}
+                <small>Live from the mirror node</small>
+              </div>
+            ) : (
+              <div className="agent-status">
+                <span
+                  className={active && !paused ? "status-dot" : "status-dot off"}
+                />
+                {!active
+                  ? "Key revoked locally"
+                  : paused
+                    ? "Policy paused locally"
+                    : "Ready to preview"}
+                <small>Simulated state</small>
+              </div>
+            )}
           </section>
           {(tab === "Overview" || tab === "Policy" || tab === "Optional DEX") && (
             <>
@@ -211,40 +254,48 @@ export default function Home() {
                     Available balance <CircleDollarSign size={17} />
                   </span>
                   <strong>
-                    8,000,000 <small>units</small>
+                    {testnet ? (snapshot ? units(snapshot.balance) : "…") : "8,000,000"} <small>units</small>
                   </strong>
-                  <p>Synthetic token balance</p>
+                  <p>{testnet ? `Agent balance of ${policyAsset}, raw units` : "Synthetic token balance"}</p>
                 </article>
                 <article>
                   <span>
                     Daily policy usage <Activity size={17} />
                   </span>
                   <strong>
-                    24<small>%</small>
+                    {testnet ? (snapshot ? usagePercent(snapshot) : "…") : 24}<small>%</small>
                   </strong>
                   <div className="progress">
-                    <i />
+                    <i style={{ width: `${Math.min(100, testnet ? (snapshot ? usagePercent(snapshot) : 0) : 24)}%` }} />
                   </div>
-                  <p>1,200,000 of 5,000,000 raw units</p>
+                  <p>
+                    {testnet
+                      ? snapshot
+                        ? `${units(snapshot.spentToday)} of ${units(snapshot.maxPerDay)} raw units today (UTC)`
+                        : "Reading policy…"
+                      : "1,200,000 of 5,000,000 raw units"}
+                  </p>
                 </article>
                 <article>
                   <span>
                     Per-transaction cap <SlidersHorizontal size={17} />
                   </span>
                   <strong>
-                    1,000,000 <small>units</small>
+                    {testnet ? (snapshot ? units(snapshot.maxPerTx) : "…") : "1,000,000"} <small>units</small>
                   </strong>
-                  <p>Enforced by the supplied client</p>
+                  <p>{testnet ? "Live from the policy contract; checked by the supplied client" : "Enforced by the supplied client"}</p>
                 </article>
               </div>
               <div className="two-col">
                 <section className="panel">
                   <div className="panel-title">
                     <h2>Try a policy check</h2>
-                    <span className="tag">INTERACTIVE</span>
+                    <span className="tag">{testnet ? "LIVE READ" : "INTERACTIVE"}</span>
                   </div>
                   <p className="muted">
-                    See whether the client would sign this spend.
+                    {testnet
+                      ? "Check this spend against the live policy contract, key state, and balance."
+                      : "See whether the client would sign this spend."}
                   </p>
                   <label htmlFor="amount">Amount in smallest units</label>
                   <div className="amount-field">
@@ -262,7 +313,7 @@ export default function Home() {
                   </div>
                   <div className="asset-row">
                     <span>Allowed asset</span>
-                    <code>0.0.429274</code>
+                    <code>{policyAsset}</code>
                   </div>
                   <button className="primary" onClick={preview} disabled={busy}>
                     {busy ? "Checking policy…" : "Check spending policy"}
@@ -279,7 +330,11 @@ export default function Home() {
                           : "Client refuses to sign"}
                       </strong>
                       <span>{result.reason.replaceAll("_", " ")}</span>
-                      <small>Preview only. No transaction was submitted.</small>
+                      <small>
+                        {testnet
+                          ? "Advisory live check. No transaction was submitted."
+                          : "Preview only. No transaction was submitted."}
+                      </small>
                     </div>
                   )}
                 </section>
@@ -289,8 +344,24 @@ export default function Home() {
                     <LockKeyhole size={19} />
                   </div>
                   <p className="muted">
-                    Change the local scenario, then check the policy again.
+                    {testnet
+                      ? "Live state from the chain. Pause and unpause with the guardian wallet below."
+                      : "Change the local scenario, then check the policy again."}
                   </p>
+                  {testnet ? <>
+                  <div className="control">
+                    <div>
+                      <strong>Agent policy</strong>
+                      <p>{live?.paused===undefined?"Reading…":live.paused?"Paused: client checks refuse new spends.":"Active."}</p>
+                    </div>
+                  </div>
+                  <div className="control">
+                    <div>
+                      <strong>Agent key access</strong>
+                      <p>{live?.agentKeyActive===undefined?"Reading…":live.agentKeyActive?"Active on the account key.":"Revoked: guardian-only account key."}</p>
+                    </div>
+                  </div>
+                  </> : <>
                   <div className="control">
                     <div>
                       <strong>Pause agent policy</strong>
@@ -330,6 +401,7 @@ export default function Home() {
                       {active ? "Simulate revoke" : "Restore demo key"}
                     </button>
                   </div>
+                  </>}
                   <div className="boundary">
                     <ShieldCheck size={18} />
                     <p>
@@ -362,7 +434,7 @@ export default function Home() {
               </div>
             </section>
           )}
-          {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void fetch('/api/agent/status').then(async response=>{if(!response.ok)return;const facts=await response.json();setLive(current=>current?{...current,agentKeyActive:facts.keyState?.agentKeyActive,paused:facts.paused,agreement:facts.agreement}:current);}).catch(()=>{});}}/></section>}
+          {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void readSnapshot();void fetch('/api/agent/status').then(async response=>{if(!response.ok)return;const facts=await response.json();setLive(current=>current?{...current,agentKeyActive:facts.keyState?.agentKeyActive,paused:facts.paused,agreement:facts.agreement}:current);}).catch(()=>{});}}/></section>}
           {tab === "Register" && (
             <section className="panel detail">
               <h2>Identity that other agents can verify</h2>
