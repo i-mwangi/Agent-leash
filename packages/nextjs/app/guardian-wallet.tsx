@@ -93,11 +93,23 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
     };
     if(await findRecord()) {savePending(null);setMessage(`${record.action} and its HCS record are confirmed: ${record.transactionId}`);return;}
     if(record.hcsTransactionId) throw new Error(`HCS transaction ${record.hcsTransactionId} was submitted; wait for mirror indexing or use the CLI reconciliation command. Do not submit it twice.`);
-    const {Hbar,TopicMessageSubmitTransaction,TransactionId}=await import('@hiero-ledger/sdk');
+    const [{Hbar,TopicMessageSubmitTransaction,TransactionId},{HederaJsonRpcMethod,transactionToBase64String}]=await Promise.all([import('@hiero-ledger/sdk'),import('@hashgraph/hedera-wallet-connect')]);
     const hcs=new TopicMessageSubmitTransaction().setTopicId(deployment.hcsTopic).setMessage(record.message);
-    hcs.setTransactionId(TransactionId.generate(deployment.guardianId)).setMaxTransactionFee(new Hbar(3)).freezeWith(client);
-    const hcsResponse=await signer.call(hcs);
-    const hcsTransactionId=hcsResponse.transactionId.toString();
+    const hcsId=TransactionId.generate(deployment.guardianId);
+    hcs.setTransactionId(hcsId).setTransactionValidDuration(180).setMaxTransactionFee(new Hbar(3)).freezeWith(client);
+    const hcsTransactionId=hcsId.toString();
+    try {
+      // DAppSigner.call() falls back to Query.fromBytes() after a wallet error, masking
+      // TRANSACTION_EXPIRED with an unrelated getByKey decoder error.
+      await signer.request({method:HederaJsonRpcMethod.SignAndExecuteTransaction,params:{signerAccountId:`hedera:testnet:${deployment.guardianId}`,transactionList:transactionToBase64String(hcs)}});
+    } catch(error) {
+      const detail=JSON.stringify(error);
+      if(/"_code"\s*:\s*4\b/.test(detail)) throw new Error('HCS approval expired before submission. Click Retry HCS record and approve the new HashPack request within three minutes.');
+      // A transport error may occur after submission. Record the ID so retry
+      // checks the mirror instead of sending an identical event twice.
+      savePending({...record,hcsTransactionId});
+      throw new Error(`HCS submission could not be confirmed. Check transaction ${hcsTransactionId} on the mirror before retrying.`);
+    }
     savePending({...record,hcsTransactionId});
     let confirmed=false;
     for(let attempt=0;attempt<10;attempt++) {
