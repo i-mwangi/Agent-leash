@@ -16,7 +16,7 @@ export async function readFacts(d:Deployment,mirror:Mirror,enforceAgreement=true
   if(!d.agentAccount || !d.hcsTopic || !d.policyAddress || !d.uaid || !d.erc8004AgentId || !d.guardianId) throw new AppError('IDENTITY_MISSING',409);
   const account=d.agentAccount,topic=d.hcsTopic,agentId=d.erc8004AgentId;
   const [accountInfo,allEvents,owner,uri,guardianInfo]=await Promise.all([
-    mirror.account(account), mirror.events(topic), mirror.call(d.registry,IDENTITY_ABI,'ownerOf',[agentId]),mirror.call(d.registry,IDENTITY_ABI,'tokenURI',[agentId]),mirror.account(d.guardianId),
+    mirror.account(account), mirror.events(topic,{identityPublishers:[d.operatorId,d.guardianId!],agentAccount:d.agentAccount!}), mirror.call(d.registry,IDENTITY_ABI,'ownerOf',[agentId]),mirror.call(d.registry,IDENTITY_ABI,'tokenURI',[agentId]),mirror.account(d.guardianId),
   ]);
   if(accountInfo.deleted) throw new AppError('ACCOUNT_DELETED');
   const events=allEvents.filter(e=>e.type==='fill' ? e.publisher===account : [d.operatorId,d.guardianId].includes(e.publisher));

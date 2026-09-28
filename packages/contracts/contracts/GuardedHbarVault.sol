@@ -6,10 +6,11 @@ contract GuardedHbarVault {
     address public immutable guardian;
     address public agent;
     bool public paused;
-    uint256 public maxPerTx;
-    uint256 public maxPerDay;
-    bytes32 public agreementHash;
+    uint256 public immutable maxPerTx;
+    uint256 public immutable maxPerDay;
+    bytes32 public immutable agreementHash;
     mapping(address => bool) public allowedRecipients;
+    address[] private recipientList;
     mapping(uint256 => uint256) public spentByUtcDay;
     bool private entered;
 
@@ -29,14 +30,22 @@ contract GuardedHbarVault {
     event AgentChanged(address indexed agent);
     event Recovered(address indexed recipient, uint256 amount);
 
-    constructor(address guardian_, address agent_, uint256 maxPerTx_, uint256 maxPerDay_, bytes32 agreementHash_) {
+    constructor(address guardian_, address agent_, uint256 maxPerTx_, uint256 maxPerDay_, bytes32 agreementHash_, address[] memory recipients_) {
         if (guardian_ == address(0) || agent_ == address(0) || guardian_ == agent_ ||
-            maxPerTx_ == 0 || maxPerDay_ < maxPerTx_ || agreementHash_ == bytes32(0)) revert InvalidPolicy();
+            maxPerTx_ == 0 || maxPerDay_ < maxPerTx_ || agreementHash_ == bytes32(0) ||
+            recipients_.length == 0 || recipients_.length > 20) revert InvalidPolicy();
         guardian = guardian_;
         agent = agent_;
         maxPerTx = maxPerTx_;
         maxPerDay = maxPerDay_;
         agreementHash = agreementHash_;
+        for (uint256 i; i < recipients_.length; i++) {
+            address recipient = recipients_[i];
+            if (recipient == address(0) || allowedRecipients[recipient]) revert InvalidPolicy();
+            allowedRecipients[recipient] = true;
+            recipientList.push(recipient);
+            emit RecipientChanged(recipient, true);
+        }
         emit PolicyChanged(maxPerTx_, maxPerDay_, agreementHash_);
     }
 
@@ -45,19 +54,8 @@ contract GuardedHbarVault {
 
     receive() external payable { emit Deposited(msg.sender, msg.value); }
 
-    function setPolicy(uint256 perTx, uint256 perDay, bytes32 hash) external onlyGuardian {
-        if (perTx == 0 || perDay < perTx || hash == bytes32(0)) revert InvalidPolicy();
-        maxPerTx = perTx;
-        maxPerDay = perDay;
-        agreementHash = hash;
-        emit PolicyChanged(perTx, perDay, hash);
-    }
-
-    function setRecipient(address recipient, bool allowed) external onlyGuardian {
-        if (recipient == address(0)) revert InvalidPolicy();
-        allowedRecipients[recipient] = allowed;
-        emit RecipientChanged(recipient, allowed);
-    }
+    /// @notice Terms are fixed for this vault's lifetime. New terms require a new vault.
+    function recipients() external view returns (address[] memory) { return recipientList; }
 
     function setPaused(bool value) external onlyGuardian {
         paused = value;

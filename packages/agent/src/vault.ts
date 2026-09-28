@@ -1,5 +1,5 @@
 import { ContractCreateTransaction, ContractExecuteTransaction, FileAppendTransaction, FileCreateTransaction, Hbar, TransferTransaction } from '@hiero-ledger/sdk';
-import { AbiCoder, Interface, Wallet, getBytes, keccak256 } from 'ethers';
+import { AbiCoder, Interface, Wallet, getBytes, keccak256, isError } from 'ethers';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { z } from 'zod';
@@ -9,12 +9,13 @@ import { Mirror } from '../../shared/src/mirror';
 import { Store } from '../../shared/src/store';
 import { accountKeyState } from '../../shared/src/keys';
 import { compileVaultTerms, vaultTermsHash } from '../../shared/src/vaultTerms';
+import { verifyVaultApproval, verifyVaultRules } from '../../shared/src/vaultVerification';
 import { clientFor, nativeOperation, roleKey } from './runtime';
 
 const DRAFT=resolve(DATA,'vault-terms-draft.json');
 const APPROVED=resolve(DATA,'vault-terms-approved.json');
 const STATE=resolve(DATA,'vault.json');
-const vaultAbi=new Interface(['function guardian() view returns(address)','function agent() view returns(address)','function paused() view returns(bool)','function maxPerTx() view returns(uint256)','function maxPerDay() view returns(uint256)','function agreementHash() view returns(bytes32)','function allowedRecipients(address) view returns(bool)','function spentByUtcDay(uint256) view returns(uint256)','function setRecipient(address,bool)','function setPaused(bool)','function setAgent(address)','function recover(address)','function spend(address,uint256)']);
+const vaultAbi=new Interface(['function guardian() view returns(address)','function agent() view returns(address)','function paused() view returns(bool)','function maxPerTx() view returns(uint256)','function maxPerDay() view returns(uint256)','function agreementHash() view returns(bytes32)','function allowedRecipients(address) view returns(bool)','function spentByUtcDay(uint256) view returns(uint256)','function recipients() view returns(address[])','function setPaused(bool)','function setAgent(address)','function recover(address)','function spend(address,uint256)']);
 const draftSchema=z.object({context:z.object({network:z.literal('hedera:testnet'),agentAccount:z.string(),guardianAccount:z.string()}),terms:z.object({version:z.literal(1),asset:z.literal('HBAR'),maxPerTxTinybars:z.string(),maxPerUtcDayTinybars:z.string(),allowedRecipients:z.array(z.string())}),hash:z.string()});
 const approvedSchema=draftSchema.extend({signature:z.string()});
 const stateSchema=approvedSchema.extend({contractId:z.string(),contractAddress:z.string()});
@@ -72,7 +73,7 @@ export async function deployVault() {
   try{return await store.exclusive('vault-deploy',async()=>{
     const file=await nativeOperation(`${operation}-file`,new FileCreateTransaction().setKeys([roleKey('operator').publicKey]).setContents(bytecode.slice(0,2048)),client,store);
     for(let offset=2048;offset<bytecode.length;offset+=2048) await nativeOperation(`${operation}-bytecode-${offset}`,new FileAppendTransaction().setFileId(file.fileId!).setContents(bytecode.slice(offset,offset+2048)),client,store);
-    const constructor=AbiCoder.defaultAbiCoder().encode(['address','address','uint256','uint256','bytes32'],[guardian.evm_address,evmAddress(d.agentAccount!),BigInt(approved.terms.maxPerTxTinybars),BigInt(approved.terms.maxPerUtcDayTinybars),approved.hash]);
+    const constructor=AbiCoder.defaultAbiCoder().encode(['address','address','uint256','uint256','bytes32','address[]'],[guardian.evm_address,evmAddress(d.agentAccount!),BigInt(approved.terms.maxPerTxTinybars),BigInt(approved.terms.maxPerUtcDayTinybars),approved.hash,approved.terms.allowedRecipients]);
     const deployed=await nativeOperation(`${operation}-create`,new ContractCreateTransaction().setBytecodeFileId(file.fileId!).setGas(1_800_000).setConstructorParameters(getBytes(constructor)),client,store);
     const contractId=deployed.contractId!;
     atomicJson(STATE,{...approved,contractId,contractAddress:evmAddress(contractId)});
@@ -84,36 +85,37 @@ function savedVault() {
   if(!existsSync(STATE)) throw new AppError('VAULT_NOT_DEPLOYED');
   return stateSchema.parse(JSON.parse(readFileSync(STATE,'utf8')));
 }
-export async function vaultStatus() {
+export async function vaultStatus() { return readVaultState(true); }
+async function readVaultState(verifyTerms:boolean) {
   const d=deployment(),v=savedVault(),mirror=new Mirror();
   const [guardian,agent,paused,perTx,perDay,hash,guardianAccount]=await Promise.all([
     mirror.call(v.contractAddress,vaultAbi,'guardian'),mirror.call(v.contractAddress,vaultAbi,'agent'),mirror.call(v.contractAddress,vaultAbi,'paused'),
     mirror.call(v.contractAddress,vaultAbi,'maxPerTx'),mirror.call(v.contractAddress,vaultAbi,'maxPerDay'),mirror.call(v.contractAddress,vaultAbi,'agreementHash'),mirror.account(d.guardianId!),
   ]);
-  if(String(guardian[0]).toLowerCase()!==guardianAccount.evm_address.toLowerCase() || String(hash[0]).toLowerCase()!==v.hash.toLowerCase() || BigInt(perTx[0])!==BigInt(v.terms.maxPerTxTinybars) || BigInt(perDay[0])!==BigInt(v.terms.maxPerUtcDayTinybars)) throw new AppError('VAULT_POLICY_MISMATCH');
-  return {contractId:v.contractId,contractAddress:v.contractAddress,hash:v.hash,agent:String(agent[0]),paused:Boolean(paused[0]),terms:v.terms,hashscan:`https://hashscan.io/testnet/contract/${v.contractId}`};
+  if(v.contractAddress.toLowerCase()!==evmAddress(v.contractId).toLowerCase() || String(guardian[0]).toLowerCase()!==guardianAccount.evm_address.toLowerCase()) throw new AppError('VAULT_POLICY_MISMATCH');
+  verifyVaultApproval(v,{network:'hedera:testnet',agentAccount:d.agentAccount!,guardianAccount:d.guardianId!},guardianAccount.evm_address);
+  if(verifyTerms) {
+    if(!['0x0000000000000000000000000000000000000000',evmAddress(d.agentAccount!).toLowerCase()].includes(String(agent[0]).toLowerCase())) throw new AppError('VAULT_AGENT_MISMATCH');
+    let recipients:string[];
+    try { recipients=Array.from((await mirror.call(v.contractAddress,vaultAbi,'recipients'))[0] as string[]); }
+    catch(error) {
+      if(error instanceof AppError && error.code==='CONTRACT_REVERT' || isError(error,'BAD_DATA')) throw new AppError('VAULT_LEGACY_REDEPLOY_REQUIRED');
+      throw error;
+    }
+    verifyVaultRules(v.terms,v.hash,{hash:String(hash[0]),maxPerTx:BigInt(perTx[0]),maxPerDay:BigInt(perDay[0]),recipients});
+  }
+  return {termsVerified:verifyTerms,contractId:v.contractId,contractAddress:v.contractAddress,hash:v.hash,agent:String(agent[0]),paused:Boolean(paused[0]),terms:v.terms,hashscan:`https://hashscan.io/testnet/contract/${v.contractId}`};
 }
 
+/** Compatibility command: new vaults install the complete immutable list at deployment. */
 export async function allowVaultRecipients() {
-  const d=deployment(),v=savedVault();
-  await vaultStatus();
-  const store=new Store(resolve(DATA,'guardian.sqlite'));
-  const client=clientFor(d.guardianId!,roleKey('guardian'));
-  try{return await store.exclusive('vault-recipients',async()=>{
-    const mirror=new Mirror(),transactions:string[]=[];
-    for(const recipient of v.terms.allowedRecipients) {
-      const allowed=await mirror.call(v.contractAddress,vaultAbi,'allowedRecipients',[recipient]);
-      if(allowed[0]) continue;
-      const result=await nativeOperation(`vault-${v.contractId}-allow-${recipient.toLowerCase()}`,new ContractExecuteTransaction().setContractId(v.contractId).setGas(300_000).setFunctionParameters(getBytes(vaultAbi.encodeFunctionData('setRecipient',[recipient,true]))),client,store);
-      transactions.push(result.txId);
-    }
-    return {contractId:v.contractId,transactions};
-  });}finally{client.close();store.close();}
+  const status=await vaultStatus();
+  return {contractId:status.contractId,termsVerified:true,recipients:status.terms.allowedRecipients,transactions:[]};
 }
 
 export async function guardianVaultAction(action:'pause'|'unpause'|'revoke') {
   const d=deployment(),v=savedVault();
-  const status=await vaultStatus();
+  const status=await readVaultState(false);
   if(action==='revoke' && status.agent.toLowerCase()==='0x0000000000000000000000000000000000000000') return status;
   if(action==='pause' && status.paused || action==='unpause' && !status.paused) return status;
   const key=roleKey('guardian');
@@ -124,13 +126,13 @@ export async function guardianVaultAction(action:'pause'|'unpause'|'revoke') {
   const client=clientFor(d.guardianId!,key);
   try{return await store.exclusive('vault-guardian',async()=>{
     const result=await nativeOperation(`vault-${action}-${Date.now()}`,new ContractExecuteTransaction().setContractId(v.contractId).setGas(300_000).setFunctionParameters(getBytes(vaultAbi.encodeFunctionData(method,[arg]))),client,store);
-    return {transactionId:result.txId,status:await vaultStatus()};
+    return {transactionId:result.txId,status:await readVaultState(false)};
   });}finally{client.close();store.close();}
 }
 
 export async function recoverVault() {
   const d=deployment(),v=savedVault();
-  const status=await vaultStatus();
+  const status=await readVaultState(false);
   if(!status.paused) throw new AppError('VAULT_MUST_BE_PAUSED');
   const key=roleKey('guardian');
   if(key.publicKey.toStringRaw()!==d.guardianPublicKey) throw new AppError('GUARDIAN_KEY_MISMATCH');
@@ -161,6 +163,7 @@ export async function vaultSpend(recipient:string,tinybars:bigint) {
   const store=new Store(resolve(DATA,'agent.sqlite'));
   const client=clientFor(d.agentAccount!,key);
   try{return await store.exclusive('vault-spend',async()=>{
+    await vaultStatus();
     // Read authoritative sources immediately before signing. The vault enforces these again on-chain.
     const [account,guardianAccount,guardian,agent,paused,allowed,perTx,perDay,hash,balance]=await Promise.all([
       mirror.account(d.agentAccount!),mirror.account(d.guardianId!),mirror.call(v.contractAddress,vaultAbi,'guardian'),mirror.call(v.contractAddress,vaultAbi,'agent'),mirror.call(v.contractAddress,vaultAbi,'paused'),mirror.call(v.contractAddress,vaultAbi,'allowedRecipients',[recipient]),

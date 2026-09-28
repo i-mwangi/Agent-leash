@@ -1,5 +1,6 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createLiveReader, type Snapshot } from './live-data';
 import { GuardianWallet } from './guardian-wallet';
 import {
   ArrowUpRight,
@@ -24,7 +25,6 @@ const tabs = [
 ] as const;
 type Tab = (typeof tabs)[number];
 type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
-type Snapshot={balance:string;spentToday:string;maxPerTx:string;maxPerDay:string};
 const units=(value:string)=>BigInt(value).toLocaleString('en-US');
 function usagePercent(s:Snapshot){const cap=BigInt(s.maxPerDay);return cap===0n?0:Number((BigInt(s.spentToday)*100n)/cap);}
 export default function Home() {
@@ -39,32 +39,39 @@ export default function Home() {
   const [live,setLive]=useState<LiveView|null>(null);
   const [fallback,setFallback]=useState<string|null>(null);
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
-  async function readSnapshot(){
-    try{const response=await fetch('/api/policy/snapshot');if(response.ok)setSnapshot((await response.json()).snapshot);}catch{/* Metrics stay unavailable. */}
-  }
+  const [liveError,setLiveError]=useState<string|null>(null);
+  const [refreshing,setRefreshing]=useState(false);
+  const reader=useRef<ReturnType<typeof createLiveReader>|null>(null);
+  const liveRevision=useRef(0);
   useEffect(()=>{
     let mounted=true;
+    let timer:ReturnType<typeof setInterval>|undefined;
+    const reads=createLiveReader(state=>{
+      if(!mounted) return;
+      ++liveRevision.current;
+      setSnapshot(state.value?.snapshot??null);
+      setLiveError(state.error);
+      setRefreshing(state.loading);
+      setResult(null);
+      setLive(current=>current?{...current,status:state.value?.status,agentKeyActive:state.value?.facts.keyState.agentKeyActive,paused:state.value?.facts.paused,agreement:state.value?.facts.agreement}:current);
+    });
+    reader.current=reads;
     (async()=>{
       try {
-        const statusRequest=fetch('/api/status');
-        const d=await fetch('/api/deployment');
-        if(!d.ok) return;
-        const deployment=await d.json();
-        // Switch to testnet presentation immediately; slower live reads fill in below.
-        if(mounted && deployment.mode==='testnet') setLive({mode:deployment.mode,deployment:deployment.deployment});
-        const s=await statusRequest;
-        if(!s.ok) return;
-        const status=await s.json();
-        let agentKeyActive: boolean|undefined,livePaused:boolean|undefined,agreement:LiveView['agreement'];
-        if(deployment.mode==='testnet' && deployment.configured){
-          const a=await fetch('/api/agent/status');
-          if(a.ok){const facts=await a.json();agentKeyActive=facts.keyState?.agentKeyActive;livePaused=facts.paused;agreement=facts.agreement;}
-          if(mounted) void readSnapshot();
+        const response=await fetch('/api/deployment',{signal:AbortSignal.timeout(15_000)});
+        if(!response.ok) throw new Error('API_UNAVAILABLE');
+        const deployment=await response.json();
+        if(!mounted) return;
+        setLive({mode:deployment.mode,deployment:deployment.deployment});
+        if(deployment.mode==='testnet') {
+          void reads.refresh();
+          timer=setInterval(()=>{void reads.refresh();},30_000);
         }
-        if(mounted) setLive({mode:deployment.mode,deployment:deployment.deployment,status,agentKeyActive,paused:livePaused,agreement});
-      } catch { /* Local demo remains available when the API is offline. */ }
+      } catch {
+        if(mounted) setLiveError('API unavailable. Live deployment could not be read.');
+      }
     })();
-    return ()=>{mounted=false;};
+    return ()=>{mounted=false;if(timer)clearInterval(timer);reads.dispose();};
   },[]);
   async function readFallback(){
     setFallback('Checking testnet pool…');
@@ -73,6 +80,7 @@ export default function Home() {
   const testnet=live?.mode==='testnet';
   const policyAsset=testnet?live?.deployment?.spendAsset??'unavailable':'0.0.429274';
   async function preview() {
+    const revision=liveRevision.current;
     setBusy(true);
     setResult(null);
     try {
@@ -94,13 +102,20 @@ export default function Home() {
             }),
           });
       const data = await response.json();
-      if (testnet && response.ok && data.snapshot) setSnapshot(data.snapshot);
+      if(testnet && revision!==liveRevision.current) return;
+      if (testnet && (!response.ok || !data.snapshot)) {
+        setSnapshot(null);
+        setLiveError('Live policy check unavailable. Refresh to read current state.');
+        setLive(current=>current?{...current,status:undefined,agentKeyActive:undefined,paused:undefined,agreement:undefined}:current);
+      }
       setResult(
         response.ok
           ? data
           : { ok: false, reason: data.error ?? "API_UNAVAILABLE" },
       );
     } catch {
+      if(testnet && revision!==liveRevision.current) return;
+      if(testnet) { setSnapshot(null);setLiveError("Live policy check unavailable. Refresh to read current state.");setLive(current=>current?{...current,status:undefined,agentKeyActive:undefined,paused:undefined,agreement:undefined}:current); }
       setResult({ ok: false, reason: "API_UNAVAILABLE" });
     } finally {
       setBusy(false);
@@ -196,11 +211,13 @@ export default function Home() {
             <span>{testnet?'TESTNET':'DEMO WORKSPACE'}</span>{' '}
             {testnet?'Everything on this page reads Hedera testnet through the local API. Guardian actions are signed in your own wallet; this page never holds a key.':'All account data is synthetic. Controls below simulate policy checks; no funds move.'}
           </div>
+          {liveError && <p role="alert">{liveError}</p>}
           {live?.mode==='testnet' && <section className="panel detail" aria-label="Live testnet status">
             <h2>Live testnet status</h2>
+            <button className="secondary" disabled={refreshing} onClick={()=>{void reader.current?.refresh();}}>{refreshing?'Refreshing...':'Refresh live data'}</button>
             <p>Agent: <code>{live.deployment?.agentAccount??'not configured'}</code> · Guardian: <code>{live.deployment?.guardianId??'not configured'}</code></p>
-            <p>Key: {live.agentKeyActive===undefined?'reading…':live.agentKeyActive?'agent active':'guardian-only'} · Policy: {live.paused===undefined?'reading…':live.paused?'paused':'active'}</p>
-            <p>Guardian policy record: {live.agreement?<><code>v{live.agreement.version}</code> · <code>{live.agreement.hash}</code> · <a href={`https://hashscan.io/testnet/topic/${live.deployment?.hcsTopic}`} target="_blank" rel="noreferrer">HCS topic</a></>:'not approved for this deployment'}</p>
+            <p>Key: {live.agentKeyActive===undefined?(liveError?'unavailable':'reading...'):live.agentKeyActive?'agent active':'guardian-only'} · Policy: {live.paused===undefined?(liveError?'unavailable':'reading...'):live.paused?'paused':'active'}</p>
+            <p>Guardian policy record: {live.agreement?<><code>v{live.agreement.version}</code> · <code>{live.agreement.hash}</code> · <a href={`https://hashscan.io/testnet/topic/${live.deployment?.hcsTopic}`} target="_blank" rel="noreferrer">HCS topic</a></>:liveError?'unavailable':refreshing?'reading...':'not approved for this deployment'}</p>
             <p>{live.status?.milestones?.map(item=>`${item.name}: ${item.ready?'ready':'pending'}`).join(' · ')}</p>
           </section>}
           <section className="agent-card">
@@ -229,8 +246,8 @@ export default function Home() {
                     ? "Policy paused"
                     : live?.agentKeyActive
                       ? "Active"
-                      : "Reading live status…"}
-                <small>Live from the mirror node</small>
+                      : liveError ? "Live status unavailable" : "Reading live status..."}
+                <small>{liveError?"Current state could not be verified":"Read from the mirror node; refreshes every 30 seconds"}</small>
               </div>
             ) : (
               <div className="agent-status">
@@ -254,7 +271,7 @@ export default function Home() {
                     Available balance <CircleDollarSign size={17} />
                   </span>
                   <strong>
-                    {testnet ? (snapshot ? units(snapshot.balance) : "…") : "8,000,000"} <small>units</small>
+                    {testnet ? (snapshot ? units(snapshot.balance) : liveError ? "Unavailable" : "...") : "8,000,000"} <small>units</small>
                   </strong>
                   <p>{testnet ? `Agent balance of ${policyAsset}, raw units` : "Synthetic token balance"}</p>
                 </article>
@@ -263,7 +280,7 @@ export default function Home() {
                     Daily policy usage <Activity size={17} />
                   </span>
                   <strong>
-                    {testnet ? (snapshot ? usagePercent(snapshot) : "…") : 24}<small>%</small>
+                    {testnet ? (snapshot ? usagePercent(snapshot) : liveError ? "Unavailable" : "...") : 24}{(!testnet || snapshot) && <small>%</small>}
                   </strong>
                   <div className="progress">
                     <i style={{ width: `${Math.min(100, testnet ? (snapshot ? usagePercent(snapshot) : 0) : 24)}%` }} />
@@ -272,7 +289,7 @@ export default function Home() {
                     {testnet
                       ? snapshot
                         ? `${units(snapshot.spentToday)} of ${units(snapshot.maxPerDay)} raw units today (UTC)`
-                        : "Reading policy…"
+                        : liveError ? "Current policy unavailable" : "Reading policy..."
                       : "1,200,000 of 5,000,000 raw units"}
                   </p>
                 </article>
@@ -281,7 +298,7 @@ export default function Home() {
                     Per-transaction cap <SlidersHorizontal size={17} />
                   </span>
                   <strong>
-                    {testnet ? (snapshot ? units(snapshot.maxPerTx) : "…") : "1,000,000"} <small>units</small>
+                    {testnet ? (snapshot ? units(snapshot.maxPerTx) : liveError ? "Unavailable" : "...") : "1,000,000"} <small>units</small>
                   </strong>
                   <p>{testnet ? "Live from the policy contract; checked by the supplied client" : "Enforced by the supplied client"}</p>
                 </article>
@@ -434,7 +451,7 @@ export default function Home() {
               </div>
             </section>
           )}
-          {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void readSnapshot();void fetch('/api/agent/status').then(async response=>{if(!response.ok)return;const facts=await response.json();setLive(current=>current?{...current,agentKeyActive:facts.keyState?.agentKeyActive,paused:facts.paused,agreement:facts.agreement}:current);}).catch(()=>{});}}/></section>}
+          {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void reader.current?.refresh();}}/></section>}
           {tab === "Register" && (
             <section className="panel detail">
               <h2>Identity that other agents can verify</h2>
@@ -496,7 +513,7 @@ export default function Home() {
                   </span>
                   <strong>{step}</strong>
                   <small>
-                    {i===0?'Local implementation':i===1?'Testnet verified':i===2?'Paid testnet verified':'Pause & key update verified'}
+                    {i===0?'Local implementation':!testnet?'Demo only':liveError?'Live data unavailable':refreshing?'Reading current state':i===1?(live.agentKeyActive===undefined?'Identity unavailable':'Identity verified'):i===2?(live.status?.milestones.find(item=>item.name==='x402 payment challenge')?.ready?'Payment challenge ready':'Payment source unavailable'):(live.paused===undefined?'Policy unavailable':'Guardian policy read')}
                   </small>
                 </div>
               ))}

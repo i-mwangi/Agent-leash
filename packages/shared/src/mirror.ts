@@ -37,15 +37,24 @@ export class Mirror {
     if (!token) throw new AppError('TOKEN_NOT_ASSOCIATED');
     return exactUnits(token.balance);
   }
-  async events(topic:string):Promise<ConsensusEvent[]> {
+  async events(topic:string, authority?:{identityPublishers:string[];agentAccount:string}):Promise<ConsensusEvent[]> {
     entityId.parse(topic); let next:string|null = `/api/v1/topics/${topic}/messages?limit=100&order=asc`;
     const events:ConsensusEvent[]=[]; let pages=0;
     while(next) {
       if (++pages > 100) throw new AppError('HCS_HISTORY_LIMIT');
       const page: {messages:{message:string;consensus_timestamp:string;sequence_number:number;payer_account_id:string}[];links:{next:string|null}} = await this.json(next);
       for(const row of page.messages) {
-        try { const event=eventSchema.parse(JSON.parse(Buffer.from(row.message,'base64').toString('utf8'))); events.push({...event,consensusTimestamp:row.consensus_timestamp,sequence:row.sequence_number,publisher:row.payer_account_id}); }
-        catch { throw new AppError('HCS_INVALID_MESSAGE'); }
+        const trusted=authority?.identityPublishers.includes(row.payer_account_id);
+        // An agent's topic-submit key is not authority over identity or guardian records.
+        if(authority && !trusted && row.payer_account_id!==authority.agentAccount) continue;
+        let event;
+        try { event=eventSchema.parse(JSON.parse(Buffer.from(row.message,'base64').toString('utf8'))); }
+        catch {
+          if(!authority || trusted) throw new AppError('HCS_INVALID_MESSAGE');
+          continue;
+        }
+        if(authority && !trusted && (event.type!=='fill' || event.agentAccount!==authority.agentAccount)) continue;
+        events.push({...event,consensusTimestamp:row.consensus_timestamp,sequence:row.sequence_number,publisher:row.payer_account_id});
       }
       next=page.links.next;
     }

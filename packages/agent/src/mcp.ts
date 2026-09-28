@@ -48,7 +48,7 @@ export function createAgentMcp() {
         const output=transfers.filter(t=>t.account===d.agentAccount && t.token_id===d.outputAsset).reduce((n,t)=>n+exactUnits(t.amount),0n);
         if(tx.result!=='SUCCESS' || tx.name!=='CONTRACTCALL' || tx.entity_id!==d.routerId || raw<=0n || net!==-raw || output<=0n) throw new AppError('FILL_PROOF_INVALID');
       } else if(tx.result==='SUCCESS') throw new AppError('FAILED_OUTCOME_CONFLICT');
-      const events=await mirror.events(d.hcsTopic);
+      const events=await mirror.events(d.hcsTopic,{identityPublishers:[d.operatorId,d.guardianId!],agentAccount:d.agentAccount!});
       if(events.some(e=>e.type==='fill' && e.payload.transactionId===transactionId && e.payload.status===status)) return answer({alreadyRecorded:true,transactionId});
       const result=await publish(d,'fill',{status,transactionId,amount,asset:d.spendAsset,...(reason?{reason}:{})},'agent',`outcome-${id}-${status}`,store);
       return answer({transactionId,recordId:result.txId,status});

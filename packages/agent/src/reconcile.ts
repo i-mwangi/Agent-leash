@@ -40,7 +40,7 @@ export async function reconcilePause(txId:string) {
     const tx=await mirror.transaction(txId);
     const [result,events,state]=await Promise.all([
       mirror.json<{contract_id:string;from:string;function_parameters:string;result:string}>(`/api/v1/contracts/results/${tx.transaction_id}`),
-      mirror.events(d.hcsTopic!),
+      mirror.events(d.hcsTopic!,{identityPublishers:[d.operatorId,d.guardianId!],agentAccount:d.agentAccount!}),
       mirror.call(d.policyAddress!,POLICY_ABI,'paused'),
     ]);
     const id=verifyPauseRecovery({txId,guardianId:d.guardianId!,policyContractId:d.policyContractId!,tx,result,events,paused:state[0]===true});
@@ -49,7 +49,7 @@ export async function reconcilePause(txId:string) {
     const canonical=id.replace(/^(0\.0\.\d+)-(\d+)-(\d{9})$/,'$1@$2.$3');
     const recorded=await publish(d,'paused',{address:d.policyAddress,transactionId:canonical},'guardian',`reconcile-pause-${id}`,store);
     for(let attempt=0;attempt<8;attempt++) {
-      const latest=await mirror.events(d.hcsTopic!);
+      const latest=await mirror.events(d.hcsTopic!,{identityPublishers:[d.operatorId,d.guardianId!],agentAccount:d.agentAccount!});
       if(latest.some(event=>event.type==='paused' && event.publisher===d.guardianId && event.payload.transactionId===canonical)) return {contractTransactionId:canonical,hcsTransactionId:recorded.txId,verified:true};
       if(attempt<7) await new Promise(resolve=>setTimeout(resolve,1500));
     }

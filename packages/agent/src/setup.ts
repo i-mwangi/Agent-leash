@@ -102,7 +102,7 @@ export async function setup() {
 }
 export async function register() {
   const d=readDeployment(); if(!d?.hcsTopic || !d.uaid || !d.policyAddress || !d.agentAccount) throw new AppError('SETUP_REQUIRED');
-  const events=await new Mirror().events(d.hcsTopic);
+  const events=await new Mirror().events(d.hcsTopic,{identityPublishers:[d.operatorId,d.guardianId!],agentAccount:d.agentAccount!});
   if(!events.some(e=>e.type==='uaid' && e.payload.uaid===d.uaid && e.publisher===d.operatorId)) throw new AppError('HCS_UAID_MISSING');
   const store=new Store(resolve(DATA,'operator.sqlite')); const client=clientFor(d.operatorId,roleKey('operator'));
   try {return await store.exclusive('register',async()=>{

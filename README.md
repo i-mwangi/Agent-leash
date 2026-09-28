@@ -76,6 +76,12 @@ To demonstrate guardian control after paid standing, run `npm run agent -- pause
 
 For **deposited HBAR only**, `GuardedHbarVault` checks a per-transaction cap, a UTC-day cap, the guardian's recipient list, pause state, and the active vault agent on every transfer. The guardian can pause, remove the vault agent, and recover remaining HBAR while paused.
 
+New vaults install the complete recipient list in the constructor. Caps, recipients, and the agreement hash are fixed for that vault's lifetime; changed terms require a new reviewed deployment. `vault-status` verifies the guardian signature, deployment context, caps, hash, and the complete on-chain recipient list. `allow-vault-recipients` remains as a compatibility command that verifies the installed list without submitting a transaction.
+
+The historical testnet vault `0.0.10748172` predates immutable terms. Its past receipts remain evidence of the earlier flow, not verification of this corrected contract. The CLI refuses new funding and agent spending for legacy vaults that cannot expose their complete list. Guardian pause, revocation, and recovery remain available. Recover funds before archiving the ignored vault state and deploying a replacement; changing source code does not upgrade an existing contract.
+
+The corrected vault was [deployed as `0.0.10764331`](https://hashscan.io/testnet/transaction/0.0.5792828%401790617860.743341105) on 28 September 2026 using the same approved 0.01-HBAR per-transaction and 0.05-HBAR UTC-day terms. It completed [funding](https://hashscan.io/testnet/transaction/0.0.5792828%401790617873.087150801), an [agent spend](https://hashscan.io/testnet/transaction/0.0.10715883%401790617885.660720931), [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790617906.222816585), rejection of a subsequent client spend, [recovery](https://hashscan.io/testnet/transaction/0.0.10715881%401790618001.365508847), and [vault-agent revocation](https://hashscan.io/testnet/transaction/0.0.10715881%401790618011.616088337). The earlier vault's zero balance was confirmed before its local state was archived.
+
 After onboarding, put precisely one sentence in a local text file (replace the address with an EVM address you control):
 
 ```text
@@ -110,6 +116,8 @@ npm run agent -- spend 1000000
 Amounts are raw smallest units: testnet USDC `0.0.429274` and SAUCE `0.0.1183558` each have six decimals, so `1000` is 0.001 USDC and `1000000` is 1 SAUCE. `fund-dex 100000000` uses up to 1 HBAR from the operator to buy testnet SAUCE for the agent through SaucerSwap; it is a separate funding trade, not the policy-gated agent spend. Check the live quote and available operator HBAR before running it.
 
 The spend command serializes requests, reserves the raw amount durably before submission, checks mirror-backed account/HCS/registry/policy/balance sources immediately before signing, and confirms the router call and token amounts before publishing a fill. Uncertain submissions stay reserved; a mirror-confirmed failed swap is recorded to HCS and released. Run guardian `revoke` only after the intended agent spends.
+
+HCS identity reads enforce publisher authority before accepting records: malformed or forged agent messages cannot replace guardian/operator identity records or poison all subsequent standing reads. Malformed authoritative records and unavailable mirror pages still fail closed. Valid agent fill records remain subject to independent transaction verification for spending calculations.
 
 New deployments use the live SaucerSwap V1 SAUCE → WHBAR testnet pool. For an older deployment configured with USDC → WHBAR, run `npm run agent -- restore` if the agent key was revoked, followed by `npm run agent -- configure-dex`; this verifies the pool, allows SAUCE in the guardian policy, associates SAUCE to the agent, and updates only the local deployment route. `restore` is a guardian-signed key update that re-enables the agent key; use it only when that is intended.
 
