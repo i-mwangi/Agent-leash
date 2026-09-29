@@ -483,7 +483,7 @@ export default function Home() {
               </p>
               <code>GET /standing/:id</code>
               <div className="notice">
-                {live?.mode==='testnet' && live.deployment?.agentAccount?<>The live endpoint returns an x402 payment challenge. Run <code>npm run agent -- pay-standing</code> from the isolated CLI to pay and verify the report. A guardian-approved HCS policy record, when present, is bound to the version 2 standing signature.</>:'In demo mode, standing remains unavailable; no payment is requested.'}
+                {live?.mode==='testnet' && live.deployment?.agentAccount?<>The live endpoint returns an x402 payment challenge. Run <code>npm run agent -- pay-standing</code> from the isolated CLI to pay and verify the report. Standing signs the guardian-approved HCS policy record when present. With a configured vault, version 3 also signs its verified rules, balance, pause and agent status.</>:'In demo mode, standing remains unavailable; no payment is requested.'}
               </div>
             </section>
           )}

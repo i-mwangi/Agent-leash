@@ -1,4 +1,5 @@
 "use client";
+import { VaultWallet } from './vault-wallet';
 import { useEffect, useRef, useState } from 'react';
 
 type Deployment={agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string};
@@ -138,7 +139,7 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
     setBusy(true);setMessage('');
     try{if(action==='connect') await connect();else if(action==='retry-hcs') await retryEvent();else await run(action);}catch(error){setMessage(error instanceof Error?error.message:'Wallet action failed');}finally{setBusy(false);}
   }
-  return <div className="notice">
+  return <><div className="notice">
     <strong>Guardian wallet</strong>
     <p>Testnet signing stays in your wallet. The connected account must be {deployment.guardianId??'the configured guardian'}.</p>
     {!PROJECT_ID?<p>Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in packages/nextjs/.env.local to enable wallet connection.</p>:<>
@@ -146,5 +147,5 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
       {account&&<><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('pause')}>Pause</button><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('unpause')}>Unpause</button><button className="secondary" disabled title="HashPack WalletConnect does not document Account Update support; use the isolated CLI" onClick={()=>void perform('revoke')}>Revoke agent key (CLI only)</button>{pending&&<button className="secondary" disabled={busy} onClick={()=>void perform('retry-hcs')}>{pending.hcsTransactionId?'Check HCS record':'Retry HCS record'}</button>}</>}
     </>}
     {message&&<p role="status">{message}</p>}
-  </div>;
+  </div>{deployment.guardianId && <VaultWallet guardianId={deployment.guardianId} account={account} getSigner={async()=>{if(!connector.current)throw new Error('Connect guardian wallet');const {AccountId}=await import('@hiero-ledger/sdk');return connector.current.getSigner(AccountId.fromString(deployment.guardianId!));}} onConfirmed={onConfirmed}/>}</>;
 }
