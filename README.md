@@ -41,7 +41,12 @@ The contract-enforced vault is a **separate, optional** step after onboarding (`
 ## Scaffold and run
 
 ```sh
-npx create-scaffold-hbar@latest agent-leash -t i-mwangi/Agent-leash -y --skip-hedera-skills
+npx create-scaffold-hbar@latest agent-leash -t i-mwangi/Agent-leash -y --skip-hedera-skills --frontend nextjs-app --solidity-framework hardhat --network testnet --package-manager=npm
+```
+
+Then run:
+
+```sh
 cd agent-leash
 npm run check
 npm run dev
@@ -49,7 +54,7 @@ npm run dev
 
 Use Node 22.13+ (Node 24 recommended). `npm run dev` launches the explicitly synthetic local demo at `http://localhost:3000` with its API at `http://127.0.0.1:3001`. Stop it before starting the testnet API below.
 
-The template sets the Next.js frontend, Hardhat, and `npm` as defaults, and the CLI targets testnet, so `-y` accepts all of them without prompts. `--skip-hedera-skills` prevents the additional Hedera Skills marketplace install. Use a lowercase project name. The `npx` command above avoids argument forwarding differences in package-manager shorthands. If using the alternate `npm` + `create` form, put `--` before the project name and template arguments; version 11 otherwise consumes the template flag. The scaffolder rewrites package-manager references in generated documentation, so the complete copy-and-run example here uses `npx`.
+The command explicitly selects Next.js, Hardhat, testnet and `npm`, so it also works when the scaffolder cannot fetch template defaults and would otherwise fall back to Foundry. `-y` accepts the selections without prompts. `--skip-hedera-skills` prevents the additional Hedera Skills marketplace install. Use a lowercase project name. The `npx` command above avoids argument forwarding differences in package-manager shorthands. If using the alternate `npm` + `create` form, put `--` before the project name and template arguments; version 11 otherwise consumes the template flag. The scaffolder rewrites package-manager references in generated documentation, so the complete copy-and-run example here uses `npx`.
 
 For a judge-facing smoke check, run `npm run dev`, open `http://localhost:3000`, and request `http://127.0.0.1:3001/health` and `/status`; the page and both API routes should return 200 in demo mode. Before testnet setup, `/standing/:id` deliberately returns unpaid 503 because its authoritative identity and payment sources are not configured. The separate testnet steps below turn that endpoint into a real 402 challenge followed by paid standing.
 
