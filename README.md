@@ -52,6 +52,24 @@ npm run check
 npm run dev
 ```
 
+To answer the scaffolder's questions instead, run the short form:
+
+```sh
+npx create-scaffold-hbar@latest -t i-mwangi/Agent-leash
+```
+
+| Question                                | Choose                                      |
+| --------------------------------------- | ------------------------------------------- |
+| What is your project name?              | A lowercase name, for example `agent-leash` |
+| Install Hedera Skills marketplace …?    | Either; **Yes** only adds agent guide files |
+| Which Hedera network?                   | **Testnet** (the template is testnet-only)  |
+| Install dependencies after scaffolding? | **Yes**                                     |
+| Which frontend framework? _(if asked)_  | **Next.js (App Router)**                    |
+| Which Solidity framework? _(if asked)_  | **Hardhat**, not the default Foundry        |
+| Which package manager? _(if asked)_     | **Npm**, not the default Yarn               |
+
+The last three questions normally do not appear: the scaffolder reads Next.js, Hardhat and npm from this template's `template.json`. They appear only if it cannot fetch that file, and then their defaults (Foundry, yarn) are wrong for this template. The short form needs an interactive terminal; the full command above asks nothing.
+
 Use Node 22.13+ (Node 24 recommended). `npm run dev` starts the dashboard at `http://localhost:3000`, its API at `http://127.0.0.1:3001` and the local agent runtime at `http://127.0.0.1:3002`. Until this workspace has a complete, verified deployment, the dashboard shows the explicitly synthetic local demo. Before starting, it creates any missing local key files (`.env.operator`, `.env.agent`, `.env.server`; ignored by git, never printed, never overwritten) and compiles the contracts if they have not been built.
 
 The command explicitly selects Next.js, Hardhat, testnet and `npm`, so it also works when the scaffolder cannot fetch template defaults and would otherwise fall back to Foundry. `-y` accepts the selections without prompts. `--skip-hedera-skills` prevents the additional Hedera Skills marketplace install. Use a lowercase project name. The `npx` command above avoids argument forwarding differences in package-manager shorthands. If using the alternate `npm` + `create` form, put `--` before the project name and template arguments; version 11 otherwise consumes the template flag. The scaffolder rewrites package-manager references in generated documentation, so the complete copy-and-run example here uses `npx`.
