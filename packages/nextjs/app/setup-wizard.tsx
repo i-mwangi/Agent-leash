@@ -81,15 +81,29 @@ export function SetupWizard() {
     return ()=>{cancelled=true;};
   },[progress?.stage]);
   // A pending wallet request is reconciled against the mirror before anything is resubmitted.
+  // The mirror indexes a few seconds after consensus, so an unknown result is checked again.
+  const [recheck,setRecheck]=useState(0);
+  const lastAdvance=useRef(0);
   useEffect(()=>{
-    if(!pending || busy) return;
+    if(!pending || busy || state?.running) return;
     if(progress && progress.stage!==pending.stage){savePending(null);return;}
+    let cancelled=false;
+    let timer:ReturnType<typeof setTimeout>|undefined;
     void (async()=>{
       const result=await checkWalletTransaction(pending.transactionId,pending.submittedAt).catch(()=>'unknown' as const);
-      if(result==='success'){setMessage('Wallet transaction confirmed. Continuing setup…');await api('/setup/advance',{method:'POST'}).then(setState).catch(()=>undefined);}
+      if(cancelled) return;
+      if(result==='success'){
+        // The runtime may need a moment to see the same record; space out repeated requests.
+        if(Date.now()-lastAdvance.current<5000){timer=setTimeout(()=>setRecheck(n=>n+1),5000);return;}
+        lastAdvance.current=Date.now();
+        setMessage('Wallet transaction confirmed. Continuing setup…');
+        await api('/setup/advance',{method:'POST'}).then(setState).catch(()=>undefined);
+      }
       else if(result==='failed' || result==='expired'){savePending(null);setMessage(`The previous ${pending.stage} request ${result==='failed'?'failed on Hedera':'expired without reaching Hedera'}. You can try again.`);}
+      else timer=setTimeout(()=>setRecheck(n=>n+1),5000);
     })();
-  },[pending,progress,busy]);
+    return ()=>{cancelled=true;if(timer)clearTimeout(timer);};
+  },[pending,progress,busy,state?.running,recheck]);
 
   async function connect() {
     const accounts=account?[account]:await connectWallet();
