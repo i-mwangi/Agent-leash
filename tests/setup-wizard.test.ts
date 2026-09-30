@@ -7,6 +7,7 @@ import { expectedTopicKeys, topicMatches, type Progress as RuntimeProgress } fro
 import { createSetupApp, SETUP_HEADER } from '../packages/agent/src/service';
 import { checkWalletTransaction, guardianBalance, mirrorTransactionId, requiredTinybars, verifyAgreementMessage, walletRejected } from '../packages/nextjs/app/setup-actions';
 import { createApp } from '../packages/server/src/app';
+import { tokenAmount } from '../packages/nextjs/app/live-data';
 
 const guardianWallet=new Wallet('0x'+'1'.padStart(64,'0'));
 const agreement:Agreement={version:1,scope:'client-enforced',agentAccount:'0.0.123',guardianAccount:'0.0.124',policyContract:'0x0000000000000000000000000000000000000125',spendAsset:'0.0.1183558',maxPerTx:'1000000',maxPerDay:'5000000'};
@@ -111,6 +112,17 @@ describe('browser agreement check',()=>{
     expect(()=>verifyAgreementMessage(shown,{...progress,guardianId:'0.0.999'})).toThrow('agent and guardian');
     const tampered=JSON.stringify({...JSON.parse(message),payload:{...payload,agreement:{...agreement,maxPerDay:'9'}}});
     expect(()=>verifyAgreementMessage({...shown,message:tampered},progress)).toThrow('message');
+  });
+});
+
+describe('dashboard token amounts',()=>{
+  it('formats raw units with the mirror-reported decimals',()=>{
+    expect(tokenAmount('1000000',6)).toBe('1');
+    expect(tokenAmount('53945214',6)).toBe('53.945214');
+    expect(tokenAmount('5000000',6)).toBe('5');
+    expect(tokenAmount('0',6)).toBe('0');
+    expect(tokenAmount('1234567890000',6)).toBe('1,234,567.89');
+    expect(tokenAmount('42',0)).toBe('42');
   });
 });
 

@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { createLiveReader, type Snapshot } from './live-data';
+import { createLiveReader, tokenAmount, type Snapshot, type SpendToken } from './live-data';
 import { GuardianWallet } from './guardian-wallet';
 import { SetupWizard } from './setup-wizard';
 import {
@@ -40,6 +40,7 @@ export default function Home() {
   const [live,setLive]=useState<LiveView|null>(null);
   const [fallback,setFallback]=useState<string|null>(null);
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
+  const [token,setToken]=useState<SpendToken|null>(null);
   const [liveError,setLiveError]=useState<string|null>(null);
   const [refreshing,setRefreshing]=useState(false);
   const reader=useRef<ReturnType<typeof createLiveReader>|null>(null);
@@ -51,6 +52,7 @@ export default function Home() {
       if(!mounted) return;
       ++liveRevision.current;
       setSnapshot(state.value?.snapshot??null);
+      if(state.value) setToken(state.value.token);
       setLiveError(state.error);
       setRefreshing(state.loading);
       setResult(null);
@@ -80,6 +82,12 @@ export default function Home() {
   }
   const testnet=live?.mode==='testnet';
   const policyAsset=testnet?live?.deployment?.spendAsset??'unavailable':'0.0.429274';
+  // Live amounts in the token's own units once its mirror-reported decimals are known.
+  const liveToken=testnet?token:null;
+  const amountOf=(raw:string)=>liveToken?tokenAmount(raw,liveToken.decimals):units(raw);
+  const unitLabel=liveToken?.symbol??'units';
+  const emptyBalance=testnet && !!snapshot && BigInt(snapshot.balance)===0n;
+  const SAUCE_TOKEN='0.0.1183558';
   async function preview() {
     const revision=liveRevision.current;
     setBusy(true);
@@ -278,9 +286,9 @@ export default function Home() {
                     Available balance <CircleDollarSign size={17} />
                   </span>
                   <strong>
-                    {testnet ? (snapshot ? units(snapshot.balance) : liveError ? "Unavailable" : "...") : "8,000,000"} <small>units</small>
+                    {testnet ? (snapshot ? amountOf(snapshot.balance) : liveError ? "Unavailable" : "...") : "8,000,000"} <small>{testnet ? unitLabel : "units"}</small>
                   </strong>
-                  <p>{testnet ? `Agent balance of ${policyAsset}, raw units` : "Synthetic token balance"}</p>
+                  <p>{testnet ? (liveToken && snapshot ? `Agent balance of ${liveToken.symbol} (${liveToken.id}); ${units(snapshot.balance)} raw units` : `Agent balance of ${policyAsset}, raw units`) : "Synthetic token balance"}</p>
                 </article>
                 <article>
                   <span>
@@ -295,7 +303,7 @@ export default function Home() {
                   <p>
                     {testnet
                       ? snapshot
-                        ? `${units(snapshot.spentToday)} of ${units(snapshot.maxPerDay)} raw units today (UTC)`
+                        ? `${amountOf(snapshot.spentToday)} of ${amountOf(snapshot.maxPerDay)} ${unitLabel} today (UTC)`
                         : liveError ? "Current policy unavailable" : "Reading policy..."
                       : "1,200,000 of 5,000,000 raw units"}
                   </p>
@@ -305,11 +313,20 @@ export default function Home() {
                     Per-transaction cap <SlidersHorizontal size={17} />
                   </span>
                   <strong>
-                    {testnet ? (snapshot ? units(snapshot.maxPerTx) : liveError ? "Unavailable" : "...") : "1,000,000"} <small>units</small>
+                    {testnet ? (snapshot ? amountOf(snapshot.maxPerTx) : liveError ? "Unavailable" : "...") : "1,000,000"} <small>{testnet ? unitLabel : "units"}</small>
                   </strong>
-                  <p>{testnet ? "Live from the policy contract; checked by the supplied client" : "Enforced by the supplied client"}</p>
+                  <p>{testnet ? `${snapshot ? `${units(snapshot.maxPerTx)} raw units; ` : ""}live from the policy contract, checked by the supplied client` : "Enforced by the supplied client"}</p>
                 </article>
               </div>
+              {emptyBalance && (
+                <div className="notice">
+                  <strong>The agent holds no {unitLabel} yet.</strong>{" "}
+                  Every spend check refuses with INSUFFICIENT BALANCE until it is funded.{" "}
+                  {policyAsset === SAUCE_TOKEN
+                    ? <>To buy testnet SAUCE for the agent through SaucerSwap with up to 1 HBAR from the setup account, run <code>npm run agent -- fund-dex 100000000</code> in the project folder.</>
+                    : <>Send {unitLabel} ({policyAsset}) to agent account {live?.deployment?.agentAccount}.</>}
+                </div>
+              )}
               <div className="two-col">
                 <section className="panel">
                   <div className="panel-title">
@@ -321,7 +338,7 @@ export default function Home() {
                       ? "Check this spend against the live policy contract, key state, and balance."
                       : "See whether the client would sign this spend."}
                   </p>
-                  <label htmlFor="amount">Amount in smallest units</label>
+                  <label htmlFor="amount">{liveToken ? `Amount in raw units (1 ${liveToken.symbol} = ${units((10n ** BigInt(liveToken.decimals)).toString())})` : "Amount in smallest units"}</label>
                   <div className="amount-field">
                     <input
                       id="amount"
@@ -337,7 +354,7 @@ export default function Home() {
                   </div>
                   <div className="asset-row">
                     <span>Allowed asset</span>
-                    <code>{policyAsset}</code>
+                    <code>{liveToken ? `${liveToken.symbol} (${liveToken.id})` : policyAsset}</code>
                   </div>
                   <button className="primary" onClick={preview} disabled={busy}>
                     {busy ? "Checking policy…" : "Check spending policy"}

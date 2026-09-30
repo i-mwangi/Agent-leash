@@ -90,8 +90,10 @@ export function createApp(modeInput:string|(()=>string) = "demo", services:()=>L
   });
   app.get('/policy/snapshot',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
-    const snapshot=await policySnapshot(live.deployment,live.mirror,()=>0n);
-    return c.json({asset:live.deployment.spendAsset,snapshot:jsonSafe(snapshot)});
+    const [snapshot,token]=await Promise.all([policySnapshot(live.deployment,live.mirror,()=>0n),live.mirror.token(live.deployment.spendAsset)]);
+    // Decimals come from the mirror so the dashboard never formats amounts from an assumption.
+    if(token.deleted || !/^(1[0-8]|\d)$/.test(token.decimals)) throw new AppError('SPEND_TOKEN_INVALID');
+    return c.json({asset:live.deployment.spendAsset,token:{id:token.token_id,symbol:token.symbol,decimals:Number(token.decimals)},snapshot:jsonSafe(snapshot)});
   });
   app.post('/policy/preview',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
