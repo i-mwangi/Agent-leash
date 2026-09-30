@@ -847,3 +847,91 @@ footer span span {
 .identity-list small {
   color: #6b7466;
 }
+
+.overview-intro {
+  max-width: 820px;
+  line-height: 1.6;
+}
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-top: 20px;
+}
+.overview-card {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  padding: 18px;
+  border: 1px solid #e3e8de;
+  border-radius: 9px;
+  background: #fbfcf9;
+}
+.overview-card > span {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #6b7466;
+}
+.overview-card strong {
+  font-size: 17px;
+  overflow-wrap: anywhere;
+}
+.overview-card em {
+  font-style: normal;
+  font-size: 12px;
+  margin-left: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.overview-card em.ok {
+  background: #e6efe0;
+  color: #2f5d3a;
+}
+.overview-card em.warn {
+  background: #f6ead6;
+  color: #7a5211;
+}
+.overview-card p {
+  margin: 0;
+  color: #5f685a;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.text-link {
+  justify-self: start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #2f5d3a;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+.how-it-works {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 22px;
+  line-height: 1.5;
+}
+details.technical summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+details.technical[open] summary {
+  margin-bottom: 12px;
+}
+@media (max-width: 1100px) {
+  .overview-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 720px) {
+  .overview-grid {
+    grid-template-columns: 1fr;
+  }
+}

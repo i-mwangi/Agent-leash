@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { createLiveReader, tokenAmount, type Snapshot, type SpendToken } from './live-data';
 import { GuardianWallet } from './guardian-wallet';
 import { SetupWizard } from './setup-wizard';
+import { OverviewSummary } from './overview';
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -197,7 +198,7 @@ export default function Home() {
               <h1>{tab === "Overview" ? "Your agent. Your rules." : tab}</h1>
               <p className="subtitle">
                 {tab === "Overview"
-                  ? "A clear view of identity, permissions, and the next action."
+                  ? "An AI agent's wallet on Hedera that you, the guardian, can check and stop."
                   : testnet
                     ? "Live view of this deployment on Hedera testnet."
                     : tab === "Create agent"
@@ -227,58 +228,54 @@ export default function Home() {
                 :'No verified agent in this workspace yet, so figures and controls here are simulated and move no funds. Set up your agent under Create agent.'}
           </div>
           {liveError && <p role="alert">{liveError}</p>}
-          {live?.mode==='testnet' && <section className="panel detail" aria-label="Live testnet status">
-            <h2>Live testnet status</h2>
+          {tab === "Overview" && (
+            <OverviewSummary
+              testnet={testnet}
+              deployment={live?.deployment}
+              agentKeyActive={live?.agentKeyActive}
+              paused={live?.paused}
+              agreement={live?.agreement}
+              paymentReady={!!live?.status?.milestones.find(item => item.name === 'x402 payment challenge')?.ready}
+              snapshot={snapshot}
+              token={liveToken}
+              goTo={setTab}
+            />
+          )}
+          {live?.mode==='testnet' && tab==='Overview' && <details className="panel detail technical" aria-label="Live testnet status">
+            <summary>Technical details</summary>
             <button className="secondary" disabled={refreshing} onClick={()=>{void reader.current?.refresh();}}>{refreshing?'Refreshing...':'Refresh live data'}</button>
             <p>Agent: <code>{live.deployment?.agentAccount??'not configured'}</code> · Guardian: <code>{live.deployment?.guardianId??'not configured'}</code></p>
             <p>Key: {live.agentKeyActive===undefined?(liveError?'unavailable':'reading...'):live.agentKeyActive?'agent active':'guardian-only'} · Policy: {live.paused===undefined?(liveError?'unavailable':'reading...'):live.paused?'paused':'active'}</p>
             <p>Guardian policy record: {live.agreement?<><code>v{live.agreement.version}</code> · <code>{live.agreement.hash}</code> · <a href={`https://hashscan.io/testnet/topic/${live.deployment?.hcsTopic}`} target="_blank" rel="noreferrer">HCS topic</a></>:liveError?'unavailable':refreshing?'reading...':'not approved for this deployment'}</p>
             <p>{live.status?.milestones?.map(item=>`${item.name}: ${item.ready?'ready':'pending'}`).join(' · ')}</p>
-          </section>}
-          <section className="agent-card">
+          </details>}
+          {tab === "Policy" && !testnet && <section className="agent-card">
             <div className="agent-identity">
               <div className="agent-icon">
                 <Fingerprint size={32} />
               </div>
               <div>
                 <div className="agent-name">
-                  {testnet ? live?.deployment?.name ?? "Agent" : "Atlas"}{" "}
-                  <span className="badge">{testnet ? "TESTNET AGENT" : "DEMO AGENT"}</span>
+                  Atlas <span className="badge">DEMO AGENT</span>
                 </div>
                 <p>
                   Guardian-controlled wallet <span>·</span> paid standing
                 </p>
               </div>
             </div>
-            {testnet ? (
-              <div className="agent-status">
-                <span
-                  className={live?.agentKeyActive && !live.paused ? "status-dot" : "status-dot off"}
-                />
-                {live?.agentKeyActive === false
-                  ? "Agent key revoked"
-                  : live?.paused
-                    ? "Policy paused"
-                    : live?.agentKeyActive
-                      ? "Active"
-                      : liveError ? "Live status unavailable" : "Reading live status..."}
-                <small>{liveError?"Current state could not be verified":"Read from the mirror node; refreshes every 30 seconds"}</small>
-              </div>
-            ) : (
-              <div className="agent-status">
-                <span
-                  className={active && !paused ? "status-dot" : "status-dot off"}
-                />
-                {!active
-                  ? "Key revoked locally"
-                  : paused
-                    ? "Policy paused locally"
-                    : "Ready to preview"}
-                <small>Simulated state</small>
-              </div>
-            )}
-          </section>
-          {(tab === "Overview" || tab === "Policy" || tab === "Optional DEX") && (
+            <div className="agent-status">
+              <span
+                className={active && !paused ? "status-dot" : "status-dot off"}
+              />
+              {!active
+                ? "Key revoked locally"
+                : paused
+                  ? "Policy paused locally"
+                  : "Ready to preview"}
+              <small>Simulated state</small>
+            </div>
+          </section>}
+          {tab === "Policy" && (
             <>
               <div className="metrics">
                 <article>
@@ -538,13 +535,17 @@ export default function Home() {
               </div>
             </section>
           )}
+          {tab === 'Optional DEX' && !testnet && <section className="panel detail">
+            <h2>Optional SaucerSwap testnet route</h2>
+            <p>After setup, this page reads a live SAUCE → WHBAR quote from SaucerSwap on Hedera testnet. The agent's own swaps are checked against its policy before it signs.</p>
+          </section>}
           {tab === 'Optional DEX' && live?.mode==='testnet' && <section className="panel detail">
             <h2>Optional SaucerSwap testnet route</h2>
             <p>Inspect the live SAUCE → WHBAR V1 pool. The agent signs a swap through the isolated CLI after checking its policy; this quote button only reads the pool.</p>
             <button className="secondary" onClick={readFallback}>Read pool quote</button>
             {fallback && <p role="status">{fallback}</p>}
           </section>}
-          <section className="roadmap">
+          {tab === "Overview" && <section className="roadmap">
             <div className="panel-title">
               <h2>From scaffold to accountable agent</h2>
               <span>BUILD PROGRESS</span>
@@ -576,7 +577,7 @@ export default function Home() {
                 );
               })}
             </div>
-          </section>
+          </section>}
           <footer>
             <span>
               Accountable Agent <span> / </span> Developer preview
