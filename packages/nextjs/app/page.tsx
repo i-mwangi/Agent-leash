@@ -19,13 +19,13 @@ import {
 const tabs = [
   "Overview",
   "Create agent",
-  "Register",
+  "Identity",
   "Policy",
   "Standing",
   "Optional DEX",
 ] as const;
 type Tab = (typeof tabs)[number];
-type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
+type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string;registry?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
 const units=(value:string)=>BigInt(value).toLocaleString('en-US');
 function usagePercent(s:Snapshot){const cap=BigInt(s.maxPerDay);return cap===0n?0:Number((BigInt(s.spentToday)*100n)/cap);}
 export default function Home() {
@@ -451,27 +451,62 @@ export default function Home() {
             </section>
           )}
           {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void reader.current?.refresh();}}/></section>}
-          {tab === "Register" && (
-            <section className="panel detail">
-              <h2>Identity that other agents can verify</h2>
-              <p>
-                The registration path connects an HCS profile, an HCS-14 UAID,
-                and an ERC-8004 agent card.
-              </p>
-              <ol>
-                <li>
-                  Create the profile topic and publish its account identity.
-                </li>
-                <li>Calculate and publish the standards-verified UAID.</li>
-                <li>
-                  Register the agent card and confirm it can be retrieved.
-                </li>
-              </ol>
-              <div className="notice">
-                {live?.deployment?.erc8004AgentId?<>Live ERC-8004 agent ID: {live.deployment.erc8004AgentId}. HCS topic: {live.deployment.hcsTopic}. UAID: <code>{live.deployment.uaid}</code>.</>:'No agent is registered in this workspace yet. Setup under Create agent registers it on ERC-8004; its ID, HCS topic and UAID appear here once verified.'}
-              </div>
-            </section>
-          )}
+          {tab === "Identity" && (() => {
+            const d = live?.deployment;
+            const registered = testnet && d?.erc8004AgentId && d.hcsTopic && d.uaid;
+            return (
+              <section className="panel detail">
+                <h2>Identity that other agents can verify</h2>
+                <p>
+                  Other agents and services use this public identity to look the
+                  agent up, see who its guardian is, and check its records before
+                  they deal with it.
+                </p>
+                {registered ? (
+                  <>
+                    <div className="notice">
+                      Registered during setup. There is nothing to do on this
+                      page; each item links to its public record.
+                    </div>
+                    <ul className="identity-list">
+                      <li>
+                        <strong>HCS profile topic</strong>{" "}
+                        <a href={`https://hashscan.io/testnet/topic/${d.hcsTopic}`} target="_blank" rel="noreferrer">{d.hcsTopic}</a>
+                        <small>Ordered, signed records: creation, UAID, policy, registration, agreement and guardian actions.</small>
+                      </li>
+                      <li>
+                        <strong>HCS-14 UAID</strong> <code>{d.uaid}</code>
+                        <small>A standard identifier derived from the agent's name and account, published to the topic.</small>
+                      </li>
+                      <li>
+                        <strong>ERC-8004 agent {d.erc8004AgentId}</strong>{" "}
+                        {d.registry && <a href={`https://hashscan.io/testnet/contract/${d.registry}`} target="_blank" rel="noreferrer">registry</a>}
+                        <small>An on-chain identity registry entry whose agent card names the account, guardian, topic, UAID and policy.</small>
+                      </li>
+                      <li>
+                        <strong>Agent card</strong>{" "}
+                        <a href="/api/.well-known/agent-card.json" target="_blank" rel="noreferrer">agent-card.json</a>
+                        <small>The card as read back from the registry and checked against this deployment.</small>
+                      </li>
+                    </ul>
+                  </>
+                ) : (
+                  <>
+                    <ol>
+                      <li>An HCS profile topic records the agent's identity.</li>
+                      <li>A standards-verified HCS-14 UAID is published to it.</li>
+                      <li>An ERC-8004 agent card is registered and read back.</li>
+                    </ol>
+                    <div className="notice">
+                      No agent is registered in this workspace yet. Setup under
+                      Create agent does this automatically; the results appear
+                      here once verified.
+                    </div>
+                  </>
+                )}
+              </section>
+            );
+          })()}
           {tab === "Standing" && (
             <section className="panel detail">
               <h2>Paid, verifiable standing</h2>
@@ -503,19 +538,26 @@ export default function Home() {
                 "Account & identity",
                 "Paid standing",
                 "Guardian oversight",
-              ].map((step, i) => (
+              ].map((step, i) => {
+                // A step is checked only when its live source was read successfully.
+                const done = i === 0 || (testnet && !liveError && !refreshing && (
+                  i === 1 ? live.agentKeyActive !== undefined
+                  : i === 2 ? !!live.status?.milestones.find(item => item.name === 'x402 payment challenge')?.ready
+                  : live.paused !== undefined));
+                return (
                 <div key={step}>
                   <span
-                    className={i === 0 ? "step-number done" : "step-number"}
+                    className={done ? "step-number done" : "step-number"}
                   >
-                    {i === 0 ? <Check size={15} /> : `0${i + 1}`}
+                    {done ? <Check size={15} /> : `0${i + 1}`}
                   </span>
                   <strong>{step}</strong>
                   <small>
                     {i===0?'Local implementation':!testnet?'Demo only':liveError?'Live data unavailable':refreshing?'Reading current state':i===1?(live.agentKeyActive===undefined?'Identity unavailable':'Identity verified'):i===2?(live.status?.milestones.find(item=>item.name==='x402 payment challenge')?.ready?'Payment challenge ready':'Payment source unavailable'):(live.paused===undefined?'Policy unavailable':'Guardian policy read')}
                   </small>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </section>
           <footer>

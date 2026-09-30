@@ -828,3 +828,22 @@ footer span span {
     font-size: 7px;
   }
 }
+.identity-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0 0;
+  display: grid;
+  gap: 14px;
+}
+.identity-list li {
+  display: grid;
+  gap: 3px;
+  overflow-wrap: anywhere;
+}
+.identity-list li strong::before {
+  content: "\2713  ";
+  color: #2f5d3a;
+}
+.identity-list small {
+  color: #6b7466;
+}
