@@ -4,7 +4,7 @@ import { WALLETCONNECT_PROJECT_ID } from './wallet-config';
 import { connectWallet, disconnectWallet, restoredAccounts, signerFor } from './wallet-session';
 import { useEffect, useState } from 'react';
 
-type Deployment={agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string};
+type Deployment={agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;guardianMode?:'local'|'wallet'};
 type PendingEvent={action:'pause'|'unpause'|'revoke';transactionId:string;message:string;hcsTransactionId?:string};
 const PROJECT_ID=WALLETCONNECT_PROJECT_ID;
 
@@ -152,7 +152,7 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
     <p>Testnet signing stays in your wallet. The connected account must be {deployment.guardianId??'the configured guardian'}.</p>
     {!PROJECT_ID?<p>Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in packages/nextjs/.env.local to enable wallet connection.</p>:<>
       <button className="secondary" disabled={busy||!!account} onClick={()=>void perform('connect')}>{account?`Connected ${account}`:'Connect wallet'}</button>
-      {account&&<><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('pause')}>Pause</button><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('unpause')}>Unpause</button><button className="secondary" disabled title="HashPack WalletConnect does not document Account Update support; use the isolated CLI" onClick={()=>void perform('revoke')}>Revoke agent key (CLI only)</button>{pending&&<button className="secondary" disabled={busy} onClick={()=>void perform('retry-hcs')}>{pending.hcsTransactionId?'Check HCS record':'Retry HCS record'}</button>}<button className="secondary" disabled={busy} onClick={()=>void perform('disconnect')}>Disconnect</button></>}
+      {account&&<><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('pause')}>Pause</button><button className="secondary" disabled={busy||!!pending} onClick={()=>void perform('unpause')}>Unpause</button><button className="secondary" disabled title={deployment.guardianMode==='wallet'?'Removing the agent key is an Account Update, which HashPack does not sign over WalletConnect. The guardian key is only in HashPack, so it needs a wallet that supports Account Update.':'HashPack WalletConnect does not document Account Update support; use the isolated CLI'} onClick={()=>void perform('revoke')}>{deployment.guardianMode==='wallet'?'Revoke agent key (not supported by HashPack)':'Revoke agent key (CLI only)'}</button>{pending&&<button className="secondary" disabled={busy} onClick={()=>void perform('retry-hcs')}>{pending.hcsTransactionId?'Check HCS record':'Retry HCS record'}</button>}<button className="secondary" disabled={busy} onClick={()=>void perform('disconnect')}>Disconnect</button></>}
     </>}
     {message&&<p role="status">{message}</p>}
   </div>{deployment.guardianId && <VaultWallet guardianId={deployment.guardianId} account={account} getSigner={async()=>{if(!account)throw new Error('Connect guardian wallet');return signerFor(deployment.guardianId!);}} onConfirmed={onConfirmed}/>}</>;

@@ -26,7 +26,7 @@ const tabs = [
   "Optional DEX",
 ] as const;
 type Tab = (typeof tabs)[number];
-type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string;registry?:string};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
+type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string;registry?:string;guardianMode?:'local'|'wallet'};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
 const units=(value:string)=>BigInt(value).toLocaleString('en-US');
 function usagePercent(s:Snapshot){const cap=BigInt(s.maxPerDay);return cap===0n?0:Number((BigInt(s.spentToday)*100n)/cap);}
 export default function Home() {
@@ -317,11 +317,13 @@ export default function Home() {
               </div>
               {emptyBalance && (
                 <div className="notice">
-                  <strong>The agent holds no {unitLabel} yet.</strong>{" "}
-                  Every spend check refuses with INSUFFICIENT BALANCE until it is funded.{" "}
-                  {policyAsset === SAUCE_TOKEN
-                    ? <>To buy testnet SAUCE for the agent through SaucerSwap with up to 1 HBAR from the setup account, run <code>npm run agent -- fund-dex 100000000</code> in the project folder.</>
-                    : <>Send {unitLabel} ({policyAsset}) to agent account {live?.deployment?.agentAccount}.</>}
+                  <div>
+                    <strong>The agent holds no {unitLabel} yet.</strong>{" "}
+                    Every spend check refuses with INSUFFICIENT BALANCE until it is funded.{" "}
+                    {policyAsset === SAUCE_TOKEN
+                      ? <>To buy testnet SAUCE for the agent through SaucerSwap with up to 1 HBAR from the setup account, run <code>npm run agent -- fund-dex 100000000</code> in the project folder.</>
+                      : <>Send {unitLabel} ({policyAsset}) to agent account {live?.deployment?.agentAccount}.</>}
+                  </div>
                 </div>
               )}
               <div className="two-col">
@@ -378,12 +380,12 @@ export default function Home() {
                 </section>
                 <section className="panel">
                   <div className="panel-title">
-                    <h2>Guardian controls</h2>
+                    <h2>{testnet ? "Agent state" : "Guardian controls"}</h2>
                     <LockKeyhole size={19} />
                   </div>
                   <p className="muted">
                     {testnet
-                      ? "Live state from the chain. Pause and unpause with the guardian wallet below."
+                      ? "Live state from the chain. Pause or unpause under Guardian actions in HashPack below."
                       : "Change the local scenario, then check the policy again."}
                   </p>
                   {testnet ? <>
@@ -464,7 +466,7 @@ export default function Home() {
               <SetupWizard/>
             </section>
           )}
-          {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void reader.current?.refresh();}}/></section>}
+          {live?.mode==='testnet' && live.deployment && <section className="panel detail compact" style={{display:tab==='Policy'?undefined:'none'}}><h2>Guardian actions in HashPack</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void reader.current?.refresh();}}/></section>}
           {tab === "Identity" && (() => {
             const d = live?.deployment;
             const registered = testnet && d?.erc8004AgentId && d.hcsTopic && d.uaid;

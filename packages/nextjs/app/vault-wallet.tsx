@@ -66,7 +66,7 @@ export function VaultWallet({guardianId,account,getSigner,onConfirmed}:{guardian
     }catch(e){setMessage(e instanceof Error?e.message:'Vault action failed');}
     finally{setBusy(false);}
   }
-  return <section className="panel detail"><h3>Contract-controlled HBAR vault</h3>
+  return <section className="panel detail compact"><h3>Contract-controlled HBAR vault</h3>
     <p>These controls apply only to deposited vault HBAR. Recovery sends its entire balance to the guardian.</p>
     {error?<p role="alert">{error}</p>:!loaded?<p>Reading verified vault state...</p>:!vault?<p>No optional vault configured. Deploy one with the CLI, then restart the testnet API.</p>:<>
       <p><a href={`https://hashscan.io/testnet/contract/${vault.contractId}`} target="_blank" rel="noreferrer">Vault {vault.contractId}</a> · {vault.paused?'Paused':'Unpaused'} · Agent {vault.agent===ZeroAddress?'revoked':'active'}</p>

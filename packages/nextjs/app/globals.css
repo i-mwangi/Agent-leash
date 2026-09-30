@@ -935,3 +935,6 @@ details.technical[open] summary {
     grid-template-columns: 1fr;
   }
 }
+.detail.compact {
+  min-height: 0;
+}
