@@ -2,8 +2,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { checkWalletTransaction, guardianBalance, requiredTinybars, verifyAgreementMessage, walletRejected, type Progress, type SetupState } from './setup-actions';
 import { WALLETCONNECT_PROJECT_ID } from './wallet-config';
+import { connectWallet, disconnectWallet, restoredAccounts, signerFor } from './wallet-session';
 
-type Connector=import('@hashgraph/hedera-wallet-connect').DAppConnector;
 type WalletStage='fund'|'topic'|'allow'|'agreement';
 type Pending={stage:WalletStage;transactionId:string;submittedAt:number};
 const PROJECT_ID=WALLETCONNECT_PROJECT_ID;
@@ -31,8 +31,8 @@ async function api(path:string,init?:RequestInit):Promise<SetupState> {
 
 /** Browser setup: the guardian approves four transactions; the local agent runtime does the rest. */
 export function SetupWizard() {
-  const connector=useRef<Connector|null>(null);
   const [account,setAccount]=useState<string|null>(null);
+  const restored=useRef(false);
   const [state,setState]=useState<SetupState|null>(null);
   const [offline,setOffline]=useState(false);
   const [busy,setBusy]=useState(false);
@@ -51,6 +51,16 @@ export function SetupWizard() {
     try{const saved=sessionStorage.getItem(PENDING_KEY);if(saved)setPending(JSON.parse(saved) as Pending);}catch{/* Ignore unreadable pending state. */}
     void refresh();
   },[refresh]);
+  // Reattach the wallet session WalletConnect kept in this browser, so a refresh stays connected.
+  // At the connect step a restored account is only offered; the guardian is chosen by a click.
+  useEffect(()=>{
+    if(!progress || restored.current || !PROJECT_ID) return;
+    restored.current=true;
+    void restoredAccounts().then(accounts=>{
+      const match=progress.guardianId?accounts.find(a=>a===progress.guardianId):accounts[0];
+      if(match) setAccount(match);
+    });
+  },[progress]);
   // Poll while the runtime works so long steps such as the policy deployment show progress.
   useEffect(()=>{
     if(!state?.running) return;
@@ -82,22 +92,22 @@ export function SetupWizard() {
   },[pending,progress,busy]);
 
   async function connect() {
-    if(!PROJECT_ID) throw new Error('Set NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID in packages/nextjs/.env.local and restart the dashboard');
-    const [{DAppConnector,HederaJsonRpcMethod,HederaSessionEvent,HederaChainId},{LedgerId}]=await Promise.all([import('@hashgraph/hedera-wallet-connect'),import('@hiero-ledger/sdk')]);
-    const instance=new DAppConnector({name:'Accountable Agent',description:'Set up a guardian-controlled Hedera testnet agent',url:window.location.origin,icons:[`${window.location.origin}/icon.svg`]},LedgerId.TESTNET,PROJECT_ID,Object.values(HederaJsonRpcMethod),[HederaSessionEvent.AccountsChanged,HederaSessionEvent.ChainChanged],[HederaChainId.Testnet]);
-    await instance.init({logger:'error'});await instance.openModal();
-    const signer=instance.signers[0];if(!signer)throw new Error('The wallet did not expose a testnet account');
-    const id=signer.getAccountId().toString();
-    if(progress?.guardianId && progress.guardianId!==id) throw new Error(`This setup's guardian is ${progress.guardianId}; connect that account`);
-    connector.current=instance;setAccount(id);
+    const accounts=account?[account]:await connectWallet();
+    const id=progress?.guardianId?accounts.find(a=>a===progress.guardianId):accounts[0];
+    if(!id) throw new Error(`This setup's guardian is ${progress?.guardianId}; connect that account in HashPack`);
+    setAccount(id);
     if(progress?.stage==='connect') setState(await api('/setup/guardian',{method:'POST',body:JSON.stringify({accountId:id})}));
+  }
+  async function disconnect() {
+    await disconnectWallet();
+    setAccount(null);
   }
 
   async function approve(stage:WalletStage) {
-    if(!progress || !connector.current || !account) throw new Error('Connect the guardian wallet first');
+    if(!progress || !account) throw new Error('Connect the guardian wallet first');
     if(pending) throw new Error('Reconcile the pending wallet request first');
     const [sdk,{HederaJsonRpcMethod,transactionToBase64String},{Interface,getBytes}]=await Promise.all([import('@hiero-ledger/sdk'),import('@hashgraph/hedera-wallet-connect'),import('ethers')]);
-    const {AccountCreateTransaction,ContractExecuteTransaction,Hbar,KeyList,PublicKey,TopicCreateTransaction,TopicMessageSubmitTransaction,TransactionId,AccountId,Client}=sdk;
+    const {AccountCreateTransaction,ContractExecuteTransaction,Hbar,KeyList,PublicKey,TopicCreateTransaction,TopicMessageSubmitTransaction,TransactionId,Client}=sdk;
     let tx;
     if(stage==='fund') tx=new AccountCreateTransaction().setKeyWithoutAlias(PublicKey.fromStringECDSA(progress.operatorPublicKey)).setInitialBalance(Hbar.fromTinybars(progress.fundingTinybars)).setAccountMemo('Accountable Agent setup');
     else if(stage==='topic'){
@@ -121,7 +131,7 @@ export function SetupWizard() {
       tx.setTransactionId(id).setTransactionValidDuration(180).setMaxTransactionFee(new Hbar(5)).freezeWith(client);
       const record={stage,transactionId:id.toString(),submittedAt:Date.now()};
       savePending(record);
-      const signer=connector.current.getSigner(AccountId.fromString(account));
+      const signer=await signerFor(account);
       try{await signer.request({method:HederaJsonRpcMethod.SignAndExecuteTransaction,params:{signerAccountId:`hedera:testnet:${account}`,transactionList:transactionToBase64String(tx)}});}
       catch(error){
         // A rejected request was never signed, so it cannot reach Hedera; anything else is reconciled on the mirror.
@@ -162,7 +172,10 @@ export function SetupWizard() {
     {pending&&<p>Waiting for <a href={`https://hashscan.io/testnet/transaction/${encodeURIComponent(pending.transactionId)}`} target="_blank" rel="noreferrer">{pending.stage} transaction</a> to reach the mirror. It will not be resubmitted.</p>}
     {!PROJECT_ID&&<p role="alert">Set <code>NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID</code> in <code>packages/nextjs/.env.local</code> and restart the dashboard to connect HashPack.</p>}
     <div className="create-agent-actions">
-      {stage!=='done'&&<button className="secondary" disabled={busy||!!account||!PROJECT_ID} onClick={()=>void perform(connect)}>{account?`Guardian ${account}`:'Connect HashPack'}</button>}
+      {stage!=='done'&&(stage==='connect'
+        ?<button className="secondary" disabled={busy||!PROJECT_ID} onClick={()=>void perform(connect)}>{account?`Use ${account} as guardian`:'Connect HashPack'}</button>
+        :<button className="secondary" disabled={busy||!!account||!PROJECT_ID} onClick={()=>void perform(connect)}>{account?`Guardian ${account}`:'Connect HashPack'}</button>)}
+      {account&&stage!=='done'&&<button className="secondary" disabled={busy} onClick={()=>void perform(disconnect)}>Disconnect</button>}
       {walletStage&&<button className="primary" disabled={busy||!account||!!pending||state.running} onClick={()=>void perform(()=>approve(walletStage))}>{{fund:'Fund setup account',topic:'Create HCS topic',allow:'Allow spend asset',agreement:'Approve agreement'}[walletStage]} in HashPack</button>}
     </div>
     {message&&<p role="status">{message}</p>}
