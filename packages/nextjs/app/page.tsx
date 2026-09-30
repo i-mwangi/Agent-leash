@@ -165,7 +165,7 @@ export default function Home() {
         </nav>
         <div className="aside-bottom">
           <span className="network-dot" /> Hedera testnet target
-          <small>{live?.mode==='testnet'?'Live reads · optional guardian wallet':'Demo data · no network transactions'}</small>
+          <small>{live?.mode==='testnet'?'Live reads · optional guardian wallet':'Sample data until setup completes'}</small>
           <a
             href="https://hedera.com/blog/scaffold-hbar-template-bounty/"
             target="_blank"
@@ -180,7 +180,7 @@ export default function Home() {
           <div>
             Workspace <span>/</span> <strong>{tab}</strong>
           </div>
-          <span className="demo-pill">{live?.mode==='testnet'?'TESTNET READS':'LOCAL DEMO'}</span>
+          <span className="demo-pill">{live?.mode==='testnet'?'TESTNET READS':'SAMPLE DATA'}</span>
         </header>
         <div className="content">
           <div className="heading">
@@ -192,7 +192,9 @@ export default function Home() {
                   ? "A clear view of identity, permissions, and the next action."
                   : testnet
                     ? "Live view of this deployment on Hedera testnet."
-                    : "Explore the accountable agent workflow in a safe local demo."}
+                    : tab === "Create agent"
+                      ? "Set up your agent on Hedera testnet."
+                      : "Sample data until your agent is set up."}
               </p>
             </div>
             {!testnet && <button
@@ -209,8 +211,12 @@ export default function Home() {
             </button>}
           </div>
           <div className="notice">
-            <span>{testnet?'TESTNET':'DEMO WORKSPACE'}</span>{' '}
-            {testnet?'Everything on this page reads Hedera testnet through the local API. Guardian actions are signed in your own wallet; this page never holds a key.':'All account data is synthetic. Controls below simulate policy checks; no funds move.'}
+            <span>{testnet?'TESTNET':tab==='Create agent'?'SETUP':'SAMPLE DATA'}</span>{' '}
+            {testnet
+              ?'Everything on this page reads Hedera testnet through the local API. Guardian actions are signed in your own wallet; this page never holds a key.'
+              :tab==='Create agent'
+                ?'Setup below submits real Hedera testnet transactions, approved in your HashPack wallet. Until it completes, the rest of the dashboard shows sample data.'
+                :'No verified agent in this workspace yet, so figures and controls here are simulated and move no funds. Set up your agent under Create agent.'}
           </div>
           {liveError && <p role="alert">{liveError}</p>}
           {live?.mode==='testnet' && <section className="panel detail" aria-label="Live testnet status">
@@ -462,7 +468,7 @@ export default function Home() {
                 </li>
               </ol>
               <div className="notice">
-                {live?.deployment?.erc8004AgentId?<>Live ERC-8004 agent ID: {live.deployment.erc8004AgentId}. HCS topic: {live.deployment.hcsTopic}. UAID: <code>{live.deployment.uaid}</code>.</>:'Switch the API to testnet mode to view a deployed identity. The local demo does not claim registration.'}
+                {live?.deployment?.erc8004AgentId?<>Live ERC-8004 agent ID: {live.deployment.erc8004AgentId}. HCS topic: {live.deployment.hcsTopic}. UAID: <code>{live.deployment.uaid}</code>.</>:'No agent is registered in this workspace yet. Setup under Create agent registers it on ERC-8004; its ID, HCS topic and UAID appear here once verified.'}
               </div>
             </section>
           )}
