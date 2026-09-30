@@ -1,44 +1,44 @@
 # Accountable Agent
 
-A Scaffold-HBAR template that gives an AI agent on Hedera a human guardian, a public identity, guardian-approved spending terms, and a paid, verifiable standing check.
+**Give an AI agent on Hedera a human guardian, a verifiable identity, and spending rules a counterparty can check.** One command scaffolds the dApp; the browser sets up the agent.
+
+Accountable Agent is a [Scaffold-HBAR](https://github.com/hedera-dev/create-scaffold-hbar) template. It creates a 1-of-2 Hedera account that the agent and a human guardian both control, registers the agent's identity on HCS and ERC-8004, records guardian-approved spending terms on-chain, and sells a signed **standing report** over x402 so other agents can verify it before dealing with it. Testnet only.
+
+---
 
 ## The problem
 
 Anyone can hand an AI agent a wallet. Nothing about that wallet makes the agent trustworthy with money: no one is visibly answerable for it, its spending rules live only in its own code, and there is no clean way to stop it or get the funds back when it misbehaves. A counterparty has no way to check any of this before dealing with it.
 
-## What this template does about it
+---
 
-| Need                                        | What the template provides                                                                                                                                                                                                                                       | Enforced by                                         |
-| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Someone answerable for the agent            | A **guardian** account holding the second key of the agent's 1-of-2 Hedera account, named in the agent's HCS profile and ERC-8004 registration                                                                                                                   | Hedera account key                                  |
-| Stop and recover                            | Guardian `pause`/`unpause` in the policy contract, and `revoke`, which updates the agent account to a guardian-only key                                                                                                                                          | Pause: supplied client only. Revoke: Hedera network |
-| Spending rules written as terms             | For the **optional HBAR vault**, one operating-terms sentence in a fixed grammar (for example _"No more than 0.01 HBAR per transaction and 0.05 HBAR per UTC day; only to 0x…"_) compiles to a per-transaction cap, a per-UTC-day cap, and a recipient allowlist | Vault contract                                      |
-| Rules that hold against a misbehaving agent | `GuardedHbarVault` checks caps, the recipient allowlist, pause, and the active agent on every `spend()`, even if the agent bypasses the supplied client                                                                                                          | Vault contract, for HBAR deposited into it          |
-| Signed terms anchored on-chain              | The guardian approves the terms hash. The vault stores it as `agreementHash`, and a guardian-approved policy record for the native account is published to the agent's HCS topic by the guardian account                                                         | Hedera contract state and HCS                       |
-| Counterparties can check the agent          | `GET /standing/:id` sells an EIP-712 signed standing report over x402 (USDC via Blocky402, confirmed on the mirror). Version 2 binds the HCS policy record; version 3 also signs verified vault rules and state                                                  | Offline signature verification and Hashscan         |
+## Features
 
-## What you get from onboarding
+- **Guardian-controlled account** — a 1-of-2 Hedera key: the agent signs on its own; the guardian can pause it or revoke its key
+- **Browser setup** — `npm run dev`, connect HashPack, approve four transactions; a local agent runtime does the rest
+- **Verifiable identity** — HCS profile topic, HCS-14 UAID and ERC-8004 registration on Hedera testnet
+- **Guardian-approved terms** — the agreement hash is published to HCS and bound into every standing report
+- **Paid standing** — `GET /standing/:id` sells an EIP-712 signed report over x402 (USDC via Blocky402, settlement confirmed on the mirror)
+- **Contract-enforced vault (optional)** — caps, recipient allowlist, pause and recovery that hold even if the agent bypasses its client
+- **Guardian wallet controls** — pause, unpause and vault recovery from HashPack in the dashboard
+- **Optional DEX example** — a policy-checked SaucerSwap swap on testnet
 
-Onboarding runs in the browser: `npm run dev`, then **Create agent** (see [Set up an agent in the browser](#set-up-an-agent-in-the-browser)). The CLI (`npm run agent -- onboard`, then `approve-agreement`) remains a scripted alternative. Both create, or verify and resume:
+---
 
-1. A 1-of-2 agent account (agent key + guardian key). In the browser, your HashPack account is the guardian; the CLI generates a local guardian account instead
-2. An HCS profile topic with the agent's HCS-14 UAID
-3. A policy contract holding pause state, per-transaction and per-day caps, and allowed assets
-4. An ERC-8004 identity registration on Hedera testnet
-5. A guardian-approved technical policy record published to HCS, which enables version 2 paid standing
+## Prerequisites
 
-The contract-enforced vault is a **separate, optional** step after onboarding (`draft-vault-terms` through `vault-spend`, described below). It is not part of onboarding.
+- **Node.js** ≥ 22.13 (24 recommended) — [nodejs.org](https://nodejs.org/)
+- **Git** (with `user.name` and `user.email` configured) — [git-scm.com](https://git-scm.com/)
+- **npm** (the template uses npm workspaces)
+- **HashPack** with an **ECDSA** Hedera testnet account holding about **50 HBAR**; it becomes the guardian. [Get testnet HBAR](https://portal.hedera.com/)
 
-## What it does not do
+No Foundry install is needed: the template uses Hardhat.
 
-- **No legal ownership.** The guardian is a key, not a verified legal person or entity. Nothing here is proof of legal ownership or an enforceable legal agreement.
-- **Not a general law-to-code translator.** The terms compiler accepts one fixed sentence shape and rejects everything else. It never guesses from free text.
-- **The native account's limits are client-enforced.** A native 1-of-2 Hedera key **does not enforce caps, pause, or recipients** against an agent that bypasses the supplied client. The HCS policy record describes those limits; it does not make them mandatory. Only HBAR deposited into the vault is under contract-enforced rules. HBAR and HTS tokens (USDC, SAUCE) in the native account are not.
-- **Vault standing is opt-in.** The API reads the local public vault record at startup. Restart it after deploying or replacing a vault. Without a configured vault, standing remains version 1 or 2; it does not claim that no other vault exists.
-- **Revocation cannot undo past spending.**
-- **Testnet only.** SaucerSwap is an optional spending example, not a prerequisite for paid standing.
+---
 
-## Scaffold and run
+## Quick start
+
+Scaffold without prompts:
 
 ```sh
 npx create-scaffold-hbar@latest agent-leash -t i-mwangi/Agent-leash -y --skip-hedera-skills --frontend nextjs-app --solidity-framework hardhat --network testnet --package-manager=npm
@@ -52,7 +52,13 @@ npm run check
 npm run dev
 ```
 
-To answer the scaffolder's questions instead, run the short form:
+Open `http://localhost:3000` and go to **Create agent** ([browser setup](#set-up-an-agent-in-the-browser)).
+
+`npm run dev` starts three processes: the dashboard at `http://localhost:3000`, the API at `http://127.0.0.1:3001` and the local agent runtime at `http://127.0.0.1:3002`. Before starting, it creates any missing local key files (`.env.operator`, `.env.agent`, `.env.server`; ignored by git, never printed, never overwritten) and compiles the contracts if needed. Until this workspace has a complete, verified deployment, the dashboard shows an explicitly labelled synthetic demo.
+
+### Interactive scaffold
+
+To answer the scaffolder's questions instead:
 
 ```sh
 npx create-scaffold-hbar@latest -t i-mwangi/Agent-leash
@@ -68,17 +74,19 @@ npx create-scaffold-hbar@latest -t i-mwangi/Agent-leash
 | Which Solidity framework? _(if asked)_  | **Hardhat**, not the default Foundry        |
 | Which package manager? _(if asked)_     | **Npm**, not the default Yarn               |
 
-The last three questions normally do not appear: the scaffolder reads Next.js, Hardhat and npm from this template's `template.json`. They appear only if it cannot fetch that file, and then their defaults (Foundry, yarn) are wrong for this template. The short form needs an interactive terminal; the full command above asks nothing.
+The last three questions normally do not appear: the scaffolder reads Next.js, Hardhat and npm from this template's `template.json`. They appear only if it cannot fetch that file, and then their defaults (Foundry, Yarn) are wrong for this template. The interactive form needs a real terminal.
 
-Use Node 22.13+ (Node 24 recommended). `npm run dev` starts the dashboard at `http://localhost:3000`, its API at `http://127.0.0.1:3001` and the local agent runtime at `http://127.0.0.1:3002`. Until this workspace has a complete, verified deployment, the dashboard shows the explicitly synthetic local demo. Before starting, it creates any missing local key files (`.env.operator`, `.env.agent`, `.env.server`; ignored by git, never printed, never overwritten) and compiles the contracts if they have not been built.
+**Scaffold notes:** the full command pins every option, so it also works when the scaffolder cannot fetch template defaults. `-y` skips prompts and `--skip-hedera-skills` skips the optional Hedera Skills install. If you use `npm create` instead of `npx`, put `--` before the project name; npm 11 otherwise consumes the template flag.
 
-The command explicitly selects Next.js, Hardhat, testnet and `npm`, so it also works when the scaffolder cannot fetch template defaults and would otherwise fall back to Foundry. `-y` accepts the selections without prompts. `--skip-hedera-skills` prevents the additional Hedera Skills marketplace install. Use a lowercase project name. The `npx` command above avoids argument forwarding differences in package-manager shorthands. If using the alternate `npm` + `create` form, put `--` before the project name and template arguments; version 11 otherwise consumes the template flag. The scaffolder rewrites package-manager references in generated documentation, so the complete copy-and-run example here uses `npx`.
+### Smoke check
 
-For a judge-facing smoke check, run `npm run dev`, open `http://localhost:3000`, and request `http://127.0.0.1:3001/health` and `/status`; the page and both API routes should return 200 in demo mode. Before testnet setup, `/standing/:id` deliberately returns unpaid 503 because its authoritative identity and payment sources are not configured. The separate testnet steps below turn that endpoint into a real 402 challenge followed by paid standing.
+With `npm run dev` running and no deployment yet: the dashboard, `http://127.0.0.1:3001/health` and `/status` return 200 in demo mode, and `/standing/:id` returns unpaid **503** because no identity or payment source is configured. It never substitutes a mock 402.
 
-### Set up an agent in the browser
+---
 
-After `npm run dev`, open **Create agent**. You need HashPack with an **ECDSA** Hedera testnet account holding about 50 HBAR; that account becomes the guardian. The page asks for four HashPack approvals, and the local agent runtime performs every other step:
+## Set up an agent in the browser
+
+After `npm run dev`, open **Create agent** and click **Connect HashPack**. The page asks for four HashPack approvals; the local agent runtime performs every other step.
 
 | Step                                            | Who                 |
 | ----------------------------------------------- | ------------------- |
@@ -91,54 +99,78 @@ After `npm run dev`, open **Create agent**. You need HashPack with an **ECDSA** 
 | Associate tokens and register ERC-8004          | Agent runtime       |
 | Review and approve the agreement                | HashPack approval   |
 
-The setup account uses the generated `.env.operator` key: it pays the policy deployment, HCS records and ERC-8004 registration, owns the registration, and keeps any unspent HBAR. A measured testnet setup used 28.7 of the 45 HBAR. The browser receives only public keys; the setup and agent keys stay with the agent runtime, and the API refuses to load either. The runtime listens on loopback only and rejects requests without its setup header or from another web origin.
+When setup finishes, the API verifies the deployment (identity, HCS records, policy, registry card and agreement) and the dashboard switches from demo to live testnet data without a restart. If verification fails, it keeps serving demo and standing stays unpaid 503.
 
-Setup is resumable. Progress is re-read from the mirror (the setup account is found by its public key, the topic by its exact guardian admin key and 1-of-3 submit key list), and each runtime write goes through the same operation store as the CLI, so a reload or crash never repeats a confirmed transaction. A wallet request whose outcome is unknown stays pending until the mirror shows it succeeded, failed or expired. When setup completes, the API verifies the deployment (identity, HCS records, policy, registry card and agreement) and switches from demo to live testnet data without a restart; if verification fails it keeps serving demo and standing stays unpaid 503.
+**What to know**
 
-In browser setup the agreement is approved by the guardian's wallet publishing the exact terms, their hash and `approval: "guardian-hcs-transaction"` to the agent's topic. The guardian key signs that HCS transaction, and verifiers accept the record only when the mirror shows the guardian account as its payer. The page recomputes the terms hash before asking for approval. The CLI path keeps its separate EIP-191 guardian signature; both formats bind the same hash into version 2 standing.
+- **Cost.** The setup account (the generated `.env.operator` key) pays the policy deployment, HCS records and ERC-8004 registration, owns the registration, and keeps any unspent HBAR. A measured testnet setup used 28.7 of the 45 HBAR.
+- **Keys.** The browser receives only public keys. The setup and agent keys stay with the agent runtime; the API refuses to load either. The runtime listens on loopback only and rejects requests without its setup header or from another web origin.
+- **Resumable.** Progress is re-read from the mirror: the setup account is found by its public key, and the topic by its exact guardian admin key and 1-of-3 submit key list. Runtime writes use the same operation store as the CLI, so a reload or crash never repeats a confirmed transaction. A wallet request with an unknown outcome stays pending until the mirror shows it succeeded, failed or expired.
+- **Agreement approval.** The guardian's wallet publishes the exact terms, their hash and `approval: "guardian-hcs-transaction"` to the agent's topic. The guardian key signs that HCS transaction, and verifiers accept the record only when the mirror shows the guardian account as its payer. The page recomputes the terms hash before asking for approval. It is a technical policy record, not a legal agreement.
+- **WalletConnect.** The template ships a public WalletConnect project ID so HashPack connects from a fresh scaffold. To use your own, set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` in `packages/nextjs/.env.local`.
 
-The template ships a public WalletConnect project ID so HashPack connects from a fresh scaffold. To use your own, set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` in `packages/nextjs/.env.local`.
+**Verification status:** on 30 September 2026 the complete flow ran on Hedera testnet from a fresh copy of this code, with the guardian played by a script-held ECDSA key submitting exactly the four transactions the page builds ([evidence](#browser-setup)). The same run passed the API's activation checks, returned a 402 challenge and produced a verified version 2 standing report. **Approval through HashPack itself has not yet been verified for this flow.**
 
-**Verification status:** on 30 September 2026 the complete flow ran on Hedera testnet from a fresh copy of this code with the guardian played by a script-held ECDSA key submitting exactly the four transactions the page builds (see [browser setup evidence](#browser-setup-evidence)). The same run passed the API's activation checks, returned a 402 challenge and produced a verified version 2 standing report. Approval through HashPack itself has not yet been verified for this flow.
+---
 
-### CLI setup
+## What is enforced, and what is not
 
-Instead of the browser, a funded operator account can script setup. `npm run dev` already created `.env.operator` with a generated key; to use your own funded ECDSA testnet account, replace `HEDERA_OPERATOR_KEY` and set `HEDERA_OPERATOR_ID` there. The CLI then generates a local guardian key and account. Run:
+| Need                                        | What the template provides                                                                                                                                                                                            | Enforced by                                         |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| Someone answerable for the agent            | A **guardian** account holding the second key of the agent's 1-of-2 Hedera account, named in the agent's HCS profile and ERC-8004 registration                                                                        | Hedera account key                                  |
+| Stop and recover                            | Guardian `pause`/`unpause` in the policy contract, and `revoke`, which updates the agent account to a guardian-only key                                                                                               | Pause: supplied client only. Revoke: Hedera network |
+| Spending rules written as terms             | For the optional vault, one sentence in a fixed grammar (_"No more than 0.01 HBAR per transaction and 0.05 HBAR per UTC day; only to 0x…"_) compiles to a per-transaction cap, a per-UTC-day cap and a recipient list | Vault contract                                      |
+| Rules that hold against a misbehaving agent | `GuardedHbarVault` checks caps, the recipient allowlist, pause and the active agent on every `spend()`, even if the agent bypasses the supplied client                                                                | Vault contract, for HBAR deposited into it          |
+| Signed terms anchored on-chain              | The guardian approves the terms hash. The vault stores it as `agreementHash`, and a guardian-approved policy record is published to the agent's HCS topic by the guardian account                                     | Hedera contract state and HCS                       |
+| Counterparties can check the agent          | `GET /standing/:id` sells an EIP-712 signed standing report over x402. Version 2 binds the HCS policy record; version 3 also signs verified vault rules and state                                                     | Offline signature verification and Hashscan         |
 
-```sh
-npm run agent -- onboard
-npm run agent -- approve-agreement
-npm run agent -- status
-npm run agent -- pay-standing
-```
+**Limits**
 
-`onboard` is resumable and prints public IDs and links. It also writes ignored `.accountable/agreement-draft.json`. **Read the draft before running `approve-agreement`.** That command checks the draft against the current on-chain caps and allowed asset, signs its deterministic hash with the isolated guardian key, and publishes the signed record to the agent's HCS topic. A later cap or asset change requires a new approval (`npm run agent -- draft-agreement`, then `approve-agreement`) before paid standing resumes. A stale local draft must be reviewed and removed or moved out of `.accountable` before regenerating it. The individual `init`, `setup`, and `register` commands remain available for troubleshooting and older deployments.
+- **No legal ownership.** The guardian is a key, not a verified legal person or entity. Nothing here is proof of legal ownership or an enforceable legal agreement.
+- **Not a general law-to-code translator.** The terms compiler accepts one fixed sentence shape and rejects everything else. It never guesses from free text.
+- **The native account's limits are client-enforced.** A native 1-of-2 Hedera key **does not enforce caps, pause or recipients** against an agent that bypasses the supplied client. The HCS policy record describes those limits; it does not make them mandatory. Only HBAR deposited into the vault is under contract-enforced rules; HBAR and HTS tokens (USDC, SAUCE) in the native account are not.
+- **Vault standing is opt-in.** The API reads the local public vault record at startup; restart it after deploying or replacing a vault. Without a configured vault, standing remains version 1 or 2; it does not claim that no other vault exists.
+- **Revocation cannot undo past spending.**
+- **Testnet only.** SaucerSwap is an optional spending example, not a prerequisite for paid standing.
 
-The CLI also creates an ignored `.env.guardian` file. Keep all role files and `.accountable/` out of GitHub, and never load spend keys in the server. A successful transaction whose local result was interrupted requires manual reconciliation rather than a duplicate write.
+---
 
-`npm run dev` switches its API to testnet automatically once the deployment verifies. To require testnet from startup instead, run the API alone: PowerShell: `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`; Bash: `APP_MODE=testnet npm run dev -w @accountable/server`. That strict mode verifies the account, HCS, registry, policy, facilitator support, and payment token association, and fails before serving if a required source is unavailable. `APP_MODE=demo` forces the synthetic demo. For `pay-standing`, the operator account must hold testnet USDC and the agent account must be associated with it; a browser-created setup account holds only HBAR.
+## Usage
 
-`GET /standing/:id` first returns an x402 challenge. After the Blocky402 settlement and an independent mirror confirmation of the exact HTS USDC transfer, it returns an EIP-712 signed standing report plus Hashscan account, topic, and policy links. Existing deployments without an agreement return the pinned 12-field version 1 report. Once a guardian-approved HCS record exists, version 2 also signs its hash and version. The supplied buyer rechecks that HCS record and the current contract policy against the signed report. With `.accountable/vault.json` configured at API startup, version 3 also signs the vault address, guardian, active vault agent, pause state, terms hash, caps, complete recipient list, balance and UTC-day usage (all HBAR amounts are tinybars). Before advertising payment, the server verifies the guardian signature and on-chain terms; a configured but unverifiable vault returns unpaid 503. The buyer independently reads the vault and pins its address and terms hash when verifying the report. These are short-lived mirror observations, not a guarantee about future state. A version 3 report without an HCS policy agreement uses agreement version 0 and the zero hash; existing version 1 and 2 formats remain unchanged. The example buyer is the operator account with a $0.001 payment limit; this service cannot enforce an arbitrary buyer's local spend cap, pause, or guardian controls. Buyers need their own wallet/client policy for that. The agent's guardian pause lives in the Hedera policy contract, and key revocation is a Hedera account update; standing reports those facts even while paused or revoked.
+### Guardian controls
 
-To demonstrate guardian control after paid standing, run `npm run agent -- pause`, `npm run agent -- unpause`, then `npm run agent -- revoke`. A fresh paid standing check after revocation reports the inactive agent key. Run the optional DEX example below **before** revocation if you want to try it with this same agent account.
+- **In the dashboard (Policy page):** connect the guardian's HashPack account to pause and unpause the policy; each action is confirmed on the mirror and then recorded as a guardian HCS event. The HCS request uses Hedera's maximum 180-second validity window; after an expired approval click **Retry HCS record** and do not repeat the contract action. Pending records survive page reloads. No guardian private key reaches the dashboard or API.
+- **Native key revocation is CLI-only:** HashPack's published WalletConnect transaction list does not include Account Update. A browser-set-up agent's guardian key lives in HashPack, so its revocation needs a wallet that supports Account Update.
+- **CLI** (local guardian key): `npm run agent -- pause`, `unpause`, `revoke`, `restore`. `revoke` updates the account to a guardian-only key; `restore` deliberately re-enables the agent key. A fresh paid standing check after revocation reports the inactive agent key.
+- If browser signing fails after a confirmed pause, `npm run agent -- reconcile-pause GUARDIAN_PAUSE_TXID` verifies the guardian payer, the exact `pause()` call to this deployment's policy, the current paused state and the missing HCS record, then signs only that HCS event with the local guardian key.
 
-### Optional contract-controlled HBAR vault
+### Paid standing (x402)
 
-For **deposited HBAR only**, `GuardedHbarVault` checks a per-transaction cap, a UTC-day cap, the guardian's recipient list, pause state, and the active vault agent on every transfer. The guardian can pause, remove the vault agent, and recover remaining HBAR while paused.
+`GET /standing/:id` first returns an x402 challenge. After the Blocky402 settlement and an independent mirror confirmation of the exact HTS USDC transfer, it returns an EIP-712 signed standing report plus Hashscan account, topic and policy links.
 
-New vaults install the complete recipient list in the constructor. Caps, recipients, and the agreement hash are fixed for that vault's lifetime; changed terms require a new reviewed deployment. `vault-status` verifies the guardian signature, deployment context, caps, hash, and the complete on-chain recipient list. `allow-vault-recipients` remains as a compatibility command that verifies the installed list without submitting a transaction.
+| Version | Signed content                                                                                                                                                               |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1       | Pinned 12-field report: identity, UAID, pause state, agent key state, caps, HCS topic, validity window                                                                       |
+| 2       | Version 1 plus the guardian-approved HCS agreement's hash and version                                                                                                        |
+| 3       | Version 2 plus the vault address, guardian, active vault agent, pause state, terms hash, caps, complete recipient list, balance and UTC-day usage (HBAR amounts in tinybars) |
 
-The historical testnet vault `0.0.10748172` predates immutable terms. Its past receipts remain evidence of the earlier flow, not verification of this corrected contract. The CLI refuses new funding and agent spending for legacy vaults that cannot expose their complete list. Guardian pause, revocation, and recovery remain available. Recover funds before archiving the ignored vault state and deploying a replacement; changing source code does not upgrade an existing contract.
+- Before advertising payment, the server verifies a configured vault's guardian signature and on-chain terms; a configured but unverifiable vault returns unpaid 503. A version 3 report without an HCS agreement uses agreement version 0 and the zero hash.
+- The supplied buyer (`npm run agent -- pay-standing`) rechecks the HCS record, current policy and vault against the signed report. It pays from the operator account with a $0.001 limit, so that account must hold testnet USDC and the agent must be associated with USDC. A browser-created setup account holds only HBAR.
+- Reports expire after two minutes and are short-lived mirror observations, not guarantees about future state. Payments have replay protection.
+- HCS reads enforce publisher authority: forged or malformed agent messages cannot replace guardian or operator identity records. Malformed authoritative records and unavailable mirror pages fail closed, and agent fill records are independently verified before they count toward daily spend.
+- This service cannot enforce an arbitrary buyer's own spend cap, pause or guardian controls; buyers need their own wallet policy.
 
-The corrected vault was [deployed as `0.0.10764331`](https://hashscan.io/testnet/transaction/0.0.5792828%401790617860.743341105) on 28 September 2026 using the same approved 0.01-HBAR per-transaction and 0.05-HBAR UTC-day terms. It completed [funding](https://hashscan.io/testnet/transaction/0.0.5792828%401790617873.087150801), an [agent spend](https://hashscan.io/testnet/transaction/0.0.10715883%401790617885.660720931), [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790617906.222816585), rejection of a subsequent client spend, [recovery](https://hashscan.io/testnet/transaction/0.0.10715881%401790618001.365508847), and [vault-agent revocation](https://hashscan.io/testnet/transaction/0.0.10715881%401790618011.616088337). The earlier vault's zero balance was confirmed before its local state was archived.
+### Optional HBAR vault
 
-After onboarding, put precisely one sentence in a local text file (replace the address with an EVM address you control):
+For **deposited HBAR only**, `GuardedHbarVault` checks a per-transaction cap, a UTC-day cap, the guardian's recipient list, pause state and the active vault agent on every transfer. The guardian can pause, remove the vault agent and recover the remaining HBAR while paused.
+
+Put exactly one sentence in a local text file (use an EVM address you control):
 
 ```text
 No more than 0.01 HBAR per transaction and 0.05 HBAR per UTC day; only to 0xYOUR_40_HEX_CHARACTER_ADDRESS.
 ```
 
-The parser rejects other wording and amounts with more than eight decimal places. Then run:
+Then run:
 
 ```sh
 npm run agent -- draft-vault-terms path/to/terms.txt
@@ -153,11 +185,15 @@ npm run agent -- vault-recover
 npm run agent -- vault-revoke
 ```
 
-All amounts in these commands are tinybars: `1000000` is 0.01 HBAR. Funding is capped at 1 HBAR per command. `approve-vault-terms` signs the reviewed, account-bound technical terms with the isolated guardian key; `deploy-vault` anchors their hash in the vault contract. The operator pays deployment and funding costs. The contract's guardian controls require the guardian key. The agent's vault spend command reads mirror-backed rules immediately before signing; the contract checks them again even if a caller bypasses this client. The CLI currently supports one local vault deployment at a time; use a new scaffold or carefully archive the ignored vault state before a separate deployment.
+- Amounts are **tinybars** (`1000000` = 0.01 HBAR). Funding is capped at 1 HBAR per command.
+- The parser rejects other wording and amounts with more than eight decimal places.
+- `approve-vault-terms` signs the reviewed, account-bound terms with the local guardian key; `deploy-vault` anchors their hash in the contract. The operator pays deployment and funding.
+- New vaults install the complete recipient list in the constructor. Caps, recipients and the agreement hash are fixed for the vault's lifetime; changed terms need a new reviewed deployment. `vault-status` verifies the guardian signature, deployment context, caps, hash and the complete on-chain recipient list. `allow-vault-recipients` only verifies the installed list.
+- The agent's `vault-spend` reads mirror-backed rules immediately before signing; the contract checks them again even if a caller bypasses the client.
+- The dashboard's **Contract-controlled HBAR vault** panel lets the guardian's HashPack account pause, unpause, revoke the vault agent and recover the full balance. Each request re-verifies the vault; confirmation checks the mirror payer, contract, result and exact calldata. **Check transaction** reads an existing receipt without resubmitting.
+- The CLI supports one local vault at a time. Legacy vault `0.0.10748172` predates immutable terms: the CLI refuses new funding and agent spending for it, while pause, revocation and recovery remain. Changing source code does not upgrade a deployed contract.
 
-The Policy page also has **Contract-controlled HBAR vault** controls using the connected guardian wallet: pause, unpause, revoke the vault agent, and recover the entire balance to the guardian address. Each request re-verifies the vault before signing; confirmation checks the testnet mirror payer, contract target, success and exact calldata. These contract actions do not change the native account key and do not require a separate HCS event. Pending transaction IDs survive page reloads; **Check transaction** reads the existing receipt without resubmitting. An ambiguous wallet error remains pending until reconciled. Browser signing must be tested with a connected wallet; local tests alone do not establish a successful HashPack approval.
-
-The **optional SaucerSwap spending example** uses:
+### Optional SaucerSwap example
 
 ```sh
 npm run agent -- quote 1000
@@ -165,40 +201,113 @@ npm run agent -- fund-dex 100000000
 npm run agent -- spend 1000000
 ```
 
-Amounts are raw smallest units: testnet USDC `0.0.429274` and SAUCE `0.0.1183558` each have six decimals, so `1000` is 0.001 USDC and `1000000` is 1 SAUCE. `fund-dex 100000000` uses up to 1 HBAR from the operator to buy testnet SAUCE for the agent through SaucerSwap; it is a separate funding trade, not the policy-gated agent spend. Check the live quote and available operator HBAR before running it.
+- Amounts are raw smallest units. Testnet USDC `0.0.429274` and SAUCE `0.0.1183558` both have six decimals: `1000` is 0.001 USDC and `1000000` is 1 SAUCE.
+- `fund-dex 100000000` uses up to 1 HBAR of operator funds to buy testnet SAUCE for the agent. It is a funding trade, not the policy-gated agent spend. Check the live quote and operator balance first.
+- `spend` serializes requests, reserves the amount durably before submission, checks mirror-backed account, HCS, registry, policy and balance sources immediately before signing, and confirms the router call and token amounts before publishing a fill. Uncertain submissions stay reserved; a mirror-confirmed failed swap is recorded to HCS and released.
+- New deployments use the live SaucerSwap V1 SAUCE → WHBAR pool. For an older USDC → WHBAR deployment, run `restore` if the agent key was revoked, then `configure-dex`.
+- Run guardian `revoke` only after the intended agent spends.
 
-The spend command serializes requests, reserves the raw amount durably before submission, checks mirror-backed account/HCS/registry/policy/balance sources immediately before signing, and confirms the router call and token amounts before publishing a fill. Uncertain submissions stay reserved; a mirror-confirmed failed swap is recorded to HCS and released. Run guardian `revoke` only after the intended agent spends.
+### MCP server
 
-HCS identity reads enforce publisher authority before accepting records: malformed or forged agent messages cannot replace guardian/operator identity records or poison all subsequent standing reads. Malformed authoritative records and unavailable mirror pages still fail closed. Valid agent fill records remain subject to independent transaction verification for spending calculations.
+`npm run agent -- mcp` starts a local stdio MCP server with `link_account`, `check_policy` and `record_outcome`. Run it in the project directory with the agent key file present. `link_account` verifies the account and stores a local ignored binding; `check_policy` is advisory; `record_outcome` checks mirror evidence before writing an HCS fill.
 
-New deployments use the live SaucerSwap V1 SAUCE → WHBAR testnet pool. For an older deployment configured with USDC → WHBAR, run `npm run agent -- restore` if the agent key was revoked, followed by `npm run agent -- configure-dex`; this verifies the pool, allows SAUCE in the guardian policy, associates SAUCE to the agent, and updates only the local deployment route. `restore` is a guardian-signed key update that re-enables the agent key; use it only when that is intended.
+---
 
-To reattach an existing deployment after re-scaffolding, copy the four ignored role environment files locally and keep the old public `.accountable/deployment.json` outside the new project. Run `npm run agent -- adopt /path/to/old/deployment.json` **instead of `onboard` or `init`**. The command verifies all four public keys, the account, HCS, registry, and policy against the mirror before saving local state; it creates no Hedera account. This path was exercised from another fresh public scaffold against the already revoked testnet agent `0.0.10719538`; it recovered the existing deployment without submitting a transaction.
+## CLI setup
 
-`npm run agent -- mcp` starts a local stdio MCP server with `link_account`, `check_policy`, and `record_outcome`. Run it in the repository directory with the isolated agent environment present. `link_account` verifies the account and stores a local ignored binding; `check_policy` is advisory; `record_outcome` checks mirror evidence before writing an HCS fill. In testnet mode the dashboard shows live identity, policy and pool quote data; demo switches and sample metrics are labelled simulations.
+The browser is the main setup path. To script setup with your own funded account instead: `npm run dev` already created `.env.operator` with a generated key; replace `HEDERA_OPERATOR_KEY` with your funded ECDSA testnet account's key and set `HEDERA_OPERATOR_ID`. The CLI then generates a local guardian key and account.
 
-The Policy tab has optional browser-wallet controls for pause and unpause. Put a public Reown/WalletConnect project ID in ignored `packages/nextjs/.env.local` as `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=...`, restart Next.js, and connect a Hedera testnet wallet that controls the configured guardian account. The UI checks the connected account ID, asks that wallet to sign, checks the transaction on the mirror, and then asks it to publish a guardian HCS event. No guardian private key is sent to the dashboard or API. The HCS request uses Hedera's maximum 180-second validity window and surfaces an expired approval as a retry instruction. The UI preserves the pending HCS record across a page reload and confirms the topic message on the mirror before reporting success. Click **Retry HCS record** after an expired approval; do not repeat the contract action. If browser signing is unavailable, `npm run agent -- reconcile-pause GUARDIAN_PAUSE_TXID` verifies the guardian payer, successful call to this deployment's policy contract, exact `pause()` function, current paused state, and absence of an HCS record before signing only the missing HCS event with the local ignored guardian key. It does not repeat the contract call. HashPack's published WalletConnect transaction list does not include Account Update, so browser native-account key revocation is disabled; use the isolated CLI for that action. Vault-agent revocation is a separate supported contract call.
+```sh
+npm run agent -- onboard
+npm run agent -- approve-agreement
+npm run agent -- status
+npm run agent -- pay-standing
+```
 
-### Browser vault verification
+- `onboard` is resumable. It writes `.accountable/agreement-draft.json`: **read it before `approve-agreement`**, which checks it against the on-chain caps and asset, signs its hash with the local guardian key (EIP-191) and publishes it to the agent's HCS topic.
+- A later cap or asset change needs a new approval (`draft-agreement`, then `approve-agreement`) before paid standing resumes. Move a stale draft out of `.accountable` before regenerating it.
+- To reattach an existing deployment after re-scaffolding, copy the four role files, keep the old public `.accountable/deployment.json` outside the project, and run `npm run agent -- adopt /path/to/deployment.json` instead of `onboard`. It verifies every public key and source against the mirror and creates no account.
+- A successful transaction whose local result was interrupted needs manual reconciliation, not a duplicate write.
 
-All four vault controls were approved through HashPack and independently checked against Hedera testnet mirror receipts for vault `0.0.10764331`:
+### Commands
 
-| Browser action                         | Evidence                                                                                                                                                                                                          |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unpause (29 September 2026)            | [Guardian transaction](https://hashscan.io/testnet/transaction/0.0.10715881%401790681811.389604462), exact `setPaused(false)` call                                                                                |
-| Pause (30 September 2026)              | [Guardian transaction](https://hashscan.io/testnet/transaction/0.0.10715881%401790767897.005691536), exact `setPaused(true)` call                                                                                 |
-| Recover (30 September 2026)            | [Guardian transaction](https://hashscan.io/testnet/transaction/0.0.10715881%401790768206.464550186), exact `recover(guardian)` call; 1,000,000 tinybars returned to the guardian, which also paid the network fee |
-| Revoke vault agent (30 September 2026) | [Guardian transaction](https://hashscan.io/testnet/transaction/0.0.10715881%401790768402.243390677), exact `setAgent(address(0))` call                                                                            |
+Run as `npm run agent -- <command>`.
 
-The recovery trial used [0.01 HBAR of operator funding](https://hashscan.io/testnet/transaction/0.0.5792828%401790768130.738559684). Before the browser revocation trial, the [local guardian restored the configured vault agent](https://hashscan.io/testnet/transaction/0.0.10715881%401790768329.857390374) while the vault was paused and empty; that preparation was a CLI-signed transaction, not a browser approval. After browser revocation, mirror reads confirmed `paused = true`, the vault agent equal to the zero address, and a zero HBAR balance. Native account `0.0.10715883` remained active: these vault actions affect only the optional vault.
+| Command                                                            | Description                                                                 |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------- |
+| `onboard`                                                          | Resumable CLI setup: accounts, topic, UAID, policy, registration, draft     |
+| `draft-agreement` / `approve-agreement`                            | Write the agreement draft / sign and publish it with the local guardian key |
+| `status`                                                           | Cross-check account key, HCS events, registry card and policy on the mirror |
+| `pay-standing`                                                     | Pay 0.001 USDC for standing and verify the signed report                    |
+| `pause` / `unpause` / `revoke` / `restore`                         | Guardian actions with the local guardian key                                |
+| `caps TX DAY`                                                      | Set new policy caps (requires a new agreement approval)                     |
+| `reconcile-pause TXID`                                             | Record the missing HCS event for a confirmed browser pause                  |
+| `draft-vault-terms FILE` / `approve-vault-terms` / `deploy-vault`  | Compile, approve and deploy vault terms                                     |
+| `vault-status` / `allow-vault-recipients`                          | Verify the vault and its installed recipient list                           |
+| `fund-vault TINYBARS` / `vault-spend RECIPIENT TINYBARS`           | Fund the vault / spend from it as the agent                                 |
+| `vault-pause` / `vault-unpause` / `vault-revoke` / `vault-recover` | Guardian vault controls                                                     |
+| `quote AMOUNT` / `quote-fallback AMOUNT`                           | Read-only SaucerSwap quotes                                                 |
+| `fund-dex TINYBARS` / `spend AMOUNT` / `configure-dex`             | DEX funding, policy-checked swap, route update                              |
+| `init` / `setup` / `register` / `adopt PUBLIC_DEPLOYMENT_JSON`     | Individual setup steps and reattaching an existing deployment               |
+| `evidence`                                                         | Print the recorded testnet transaction links                                |
+| `mcp`                                                              | Start the local stdio MCP server                                            |
 
-### Version 3 standing verification
+---
 
-On 29 September 2026, [a paid standing request](https://hashscan.io/testnet/transaction/0.0.7162784%401790661109.480107192) returned a version 3 report for vault `0.0.10764331`, with its approved caps and recipient, paused state, revoked vault agent, and zero HBAR balance. A network error interrupted the buyer's final verification. The saved report was recovered without another payment: its EIP-712 signature was verified at its issuance time and its exact USDC settlement was independently confirmed on the mirror. This is historical evidence, not an unexpired standing report. The browser vault transactions above are separate live evidence from this paid report.
+## Configuration
 
-### Browser setup evidence
+| File or variable                       | Purpose                                                                                                           |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `.env.operator`                        | Setup/operator key (generated by `npm run dev`); `HEDERA_OPERATOR_ID` is added once the account exists            |
+| `.env.agent`                           | Agent key, used only by the agent runtime and CLI                                                                 |
+| `.env.server`                          | Attestation key that signs standing reports; the API refuses spend keys                                           |
+| `.env.guardian`                        | Local guardian key, created only by CLI setup                                                                     |
+| `.accountable/`                        | Deployment record, drafts, operation stores and evidence log                                                      |
+| `APP_MODE`                             | API mode: `auto` (default: demo until the deployment verifies), `testnet` (strict: fail before serving) or `demo` |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional override in `packages/nextjs/.env.local`                                                                 |
 
-On 30 September 2026 the browser-setup runtime ran from a fresh copy of this code (no keys or deployment state). A script-held ECDSA key played the HashPack guardian `0.0.10797338` and submitted the same four transactions the page builds; this is not a HashPack approval.
+All role files and `.accountable/` are ignored by git; keep them out of GitHub. To run the API alone in strict testnet mode: PowerShell `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`, Bash `APP_MODE=testnet npm run dev -w @accountable/server`. Strict mode verifies the account, HCS, registry, policy, facilitator support and payment token association, and fails before serving if a source is unavailable.
+
+The agent card's default standing endpoint is `localhost:3001`, for local development only. Set a reachable URL before registration to offer a public paid endpoint.
+
+---
+
+## Development
+
+- **Full check:** `npm run check` (lint, TypeScript, unit and integration tests, Solidity execution tests, production builds)
+- **Lint:** `npm run lint`
+- **Typecheck:** `npm run typecheck`
+- **Tests:** `npm test`
+- **Build:** `npm run build`
+- **Format README:** `npm run format`
+
+Tests are deterministic and need no funded accounts. The pinned raw-digest Hedera signing and offline EIP-712 standing verification tests must keep passing when transaction or report formats change.
+
+---
+
+## Project structure
+
+```
+agent-leash/
+├── packages/
+│   ├── agent/        # CLI, local setup runtime (service.ts, wizard.ts), policy guard, vault, swap, MCP
+│   ├── server/       # Hono API: x402 settlement, signed standing, auto/testnet/demo modes
+│   ├── shared/       # Mirror and HCS readers, identity checks, UAID, agreement and vault verification
+│   ├── contracts/    # PolicyRegistry (client-enforced policy) and GuardedHbarVault (contract-enforced HBAR)
+│   └── nextjs/       # Dashboard: demo, browser setup, live status, guardian wallet controls
+├── tests/            # Vitest suites (deterministic, no funded accounts)
+└── template.json     # Scaffold-HBAR manifest: Next.js, Hardhat, npm
+```
+
+---
+
+## Testnet evidence
+
+All entries below are **real testnet writes**, separate from the demo and from local contract execution. Public IDs are examples, not fresh-scaffold defaults. No forked-mainnet execution is claimed.
+
+### Browser setup
+
+On 30 September 2026 the browser-setup runtime ran from a fresh copy of this code (no keys or deployment state). A script-held ECDSA key played the HashPack guardian `0.0.10797338` and submitted the same four transactions the page builds; this is **not** a HashPack approval.
 
 | Step                          | Evidence                                                                                                                                                                                                                                                     |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -210,59 +319,74 @@ On 30 September 2026 the browser-setup runtime ran from a fresh copy of this cod
 | Runtime registers ERC-8004    | [agent `124`](https://hashscan.io/testnet/transaction/0.0.10797345%401790799722.505483660)                                                                                                                                                                   |
 | Guardian approves agreement   | [guardian-published HCS record](https://hashscan.io/testnet/transaction/0.0.10797338%401790799741.989296153), hash `0x1d2a894bc0605a8d9ee4ced72f8d7e6675c890ae261c4859c000cabf8a5bfd2a`; the API accepted it and signed a version 2 report binding this hash |
 
-The run took about two minutes and left 16.3 of the 45 HBAR in the setup account. No paid standing request was made for this agent: the browser-created setup account holds no USDC.
+The run took about two minutes and left 16.3 of the 45 HBAR in the setup account. No paid standing request was made for this agent: its setup account holds no USDC.
 
-## Real testnet evidence
+### CLI deployment (25–27 September 2026)
 
-These are **testnet writes** from one local deployment on 25–27 September 2026, separate from the demo and local contract execution.
+| Item                                | Evidence                                                                                                                                                                                                                                                                                                                                            |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Guardian account `0.0.10715881`     | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349018.352739409)                                                                                                                                                                                                                                                              |
+| 1-of-2 agent account `0.0.10715883` | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349024.163447892)                                                                                                                                                                                                                                                              |
+| HCS topic `0.0.10715890`            | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349046.149672625), [UAID message](https://hashscan.io/testnet/transaction/0.0.5792828%401790349056.243185055)                                                                                                                                                                  |
+| Policy contract `0.0.10715941`      | [deployment](https://hashscan.io/testnet/transaction/0.0.5792828%401790349205.179484212), [allowlist](https://hashscan.io/testnet/transaction/0.0.10715881%401790349210.300763930)                                                                                                                                                                  |
+| ERC-8004 agent `121`                | [registration](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [card update](https://hashscan.io/testnet/transaction/0.0.5792828%401790349280.300460069)                                                                                                                                                               |
+| Token associations                  | [USDC](https://hashscan.io/testnet/transaction/0.0.10715883%401790349220.774920691), [WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790349224.140844625)                                                                                                                                                                           |
+| x402 paid standing                  | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790350541.346608081), operator `0.0.5792828` → agent `0.0.10715883`; [a later settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790502158.010293147) whose signed report and derived account/topic/policy links passed the supplied client verifier |
+| Guardian policy record              | [guardian-signed HCS publication](https://hashscan.io/testnet/transaction/0.0.10715881%401790534670.287987571) on topic `0.0.10715890`; version 1 hash `0xe88cb434742bcab8ff9606794b3bb4f26e27efe6c2101cd427d7374d03815c8f`                                                                                                                         |
+| Version 2 paid standing             | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790534853.007138227); the buyer verified the settlement, HCS policy record, current policy and EIP-712 signature containing the same hash and version                                                                                                                |
+| Guardian pause/unpause              | [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351849.434983179), [unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351875.376849531)                                                                                                                                                                        |
+| Browser pause and HCS recovery      | [HashPack-signed pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790473656.056565005), [guardian HCS record](https://hashscan.io/testnet/transaction/0.0.10715881%401790475981.763264663)                                                                                                                                            |
+| Browser wallet HCS retry            | [HashPack-signed pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790500372.264324397), [HashPack-signed HCS event](https://hashscan.io/testnet/transaction/0.0.10715881%401790501022.616111836); topic `0.0.10715890` records the pause transaction ID                                                                               |
+| Browser wallet unpause              | [HashPack-signed unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790501434.858306810), [HashPack-signed HCS event](https://hashscan.io/testnet/transaction/0.0.10715881%401790501442.745705531); topic `0.0.10715890` records the unpause transaction ID                                                                           |
+| Guardian revocation                 | [key update](https://hashscan.io/testnet/transaction/0.0.10715881%401790351896.589395734), [HCS rotated event](https://hashscan.io/testnet/transaction/0.0.10715881%401790351899.146336845)                                                                                                                                                         |
+| Standing after revocation           | [second USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790351936.882024325); verified EIP-712 report returned `agentKeyActive: false`                                                                                                                                                                                      |
 
-| Item                                | Evidence                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Guardian account `0.0.10715881`     | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349018.352739409)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| 1-of-2 agent account `0.0.10715883` | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349024.163447892)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
-| HCS topic `0.0.10715890`            | [creation](https://hashscan.io/testnet/transaction/0.0.5792828%401790349046.149672625), [UAID message](https://hashscan.io/testnet/transaction/0.0.5792828%401790349056.243185055)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| Policy contract `0.0.10715941`      | [deployment](https://hashscan.io/testnet/transaction/0.0.5792828%401790349205.179484212), [allowlist](https://hashscan.io/testnet/transaction/0.0.10715881%401790349210.300763930)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ERC-8004 agent `121`                | [registration](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [card update](https://hashscan.io/testnet/transaction/0.0.5792828%401790349280.300460069)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Token associations                  | [USDC](https://hashscan.io/testnet/transaction/0.0.10715883%401790349220.774920691), [WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790349224.140844625)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| x402 paid standing                  | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790350541.346608081), operator `0.0.5792828` → agent `0.0.10715883`; [a later settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790502158.010293147) whose signed report and derived account/topic/policy links passed the supplied client verifier                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
-| Guardian policy record              | [guardian-signed HCS publication](https://hashscan.io/testnet/transaction/0.0.10715881%401790534670.287987571) on topic `0.0.10715890`; version 1 hash `0xe88cb434742bcab8ff9606794b3bb4f26e27efe6c2101cd427d7374d03815c8f`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Version 2 paid standing             | [0.001 USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790534853.007138227); the buyer verified the settlement, HCS policy record, current policy, and EIP-712 signature containing the same hash and version                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Optional HBAR vault                 | [contract `0.0.10748172`](https://hashscan.io/testnet/contract/0.0.10748172) anchors guardian-approved hash `0x2f3789592bb1eb1a39ab041d02527412e24ad26b4ef7d4d329efc847df0c14d7`; [guardian allowlist](https://hashscan.io/testnet/transaction/0.0.10715881%401790536453.749688714), [0.02 HBAR funding](https://hashscan.io/testnet/transaction/0.0.5792828%401790536476.459345908), [0.01 HBAR agent spend](https://hashscan.io/testnet/transaction/0.0.10715883%401790536487.595052999), [guardian pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790536502.671587111), [0.01 HBAR recovery](https://hashscan.io/testnet/transaction/0.0.10715881%401790536526.827710143), and [vault agent revocation](https://hashscan.io/testnet/transaction/0.0.10715881%401790536541.410582156). The mirror showed a 1,000,000-tinybar recipient credit on spend and a zero vault balance after recovery; a paused spend was rejected before signing. |
-| Guardian pause/unpause              | [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351849.434983179), [unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790351875.376849531)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
-| Browser pause and HCS recovery      | [HashPack-signed pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790473656.056565005), [guardian HCS record](https://hashscan.io/testnet/transaction/0.0.10715881%401790475981.763264663)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Browser wallet HCS retry            | [HashPack-signed pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790500372.264324397), [HashPack-signed HCS event](https://hashscan.io/testnet/transaction/0.0.10715881%401790501022.616111836); topic `0.0.10715890` records the pause transaction ID                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Browser wallet unpause              | [HashPack-signed unpause](https://hashscan.io/testnet/transaction/0.0.10715881%401790501434.858306810), [HashPack-signed HCS event](https://hashscan.io/testnet/transaction/0.0.10715881%401790501442.745705531); topic `0.0.10715890` records the unpause transaction ID                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| Guardian revocation                 | [key update](https://hashscan.io/testnet/transaction/0.0.10715881%401790351896.589395734), [HCS rotated event](https://hashscan.io/testnet/transaction/0.0.10715881%401790351899.146336845)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-| Standing after revocation           | [second USDC settlement](https://hashscan.io/testnet/transaction/0.0.7162784%401790351936.882024325); verified EIP-712 report returned `agentKeyActive: false`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+The agent was later [restored by its guardian](https://hashscan.io/testnet/transaction/0.0.10715881%401790369383.959931297) to test the DEX route; its key is active again. The revoked-state standing evidence remains valid for the time it was issued.
 
-`npm run agent -- status` reads and cross-checks the mirror account key, HCS publishers/events, registry owner/card, and guardian policy. These public IDs are examples, not fresh-scaffold defaults.
+### Vaults
 
-The first agent was later [restored by its guardian](https://hashscan.io/testnet/transaction/0.0.10715881%401790369383.959931297) to test the live DEX route; its current key state is active. The historical revoked-state standing evidence above remains valid for the time it was issued.
+**Legacy vault** [`0.0.10748172`](https://hashscan.io/testnet/contract/0.0.10748172) (predates immutable terms) anchored guardian-approved hash `0x2f3789592bb1eb1a39ab041d02527412e24ad26b4ef7d4d329efc847df0c14d7`: [guardian allowlist](https://hashscan.io/testnet/transaction/0.0.10715881%401790536453.749688714), [0.02 HBAR funding](https://hashscan.io/testnet/transaction/0.0.5792828%401790536476.459345908), [0.01 HBAR agent spend](https://hashscan.io/testnet/transaction/0.0.10715883%401790536487.595052999), [guardian pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790536502.671587111), [0.01 HBAR recovery](https://hashscan.io/testnet/transaction/0.0.10715881%401790536526.827710143) and [vault agent revocation](https://hashscan.io/testnet/transaction/0.0.10715881%401790536541.410582156). The mirror showed a 1,000,000-tinybar recipient credit on spend and a zero balance after recovery; a paused spend was rejected before signing. These receipts are evidence of the earlier flow, not of the corrected contract.
 
-A **second deployment from a freshly downloaded public scaffold** also completed the allowed fallback flow on testnet: [agent account `0.0.10719538`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368400.901918984), [HCS topic `0.0.10719539`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368403.419699553), [policy `0.0.10719558`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368452.706297608), [ERC-8004 agent `122`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368490.311414726), [paid standing](https://hashscan.io/testnet/transaction/0.0.7162784%401790368535.441608179), [guardian revocation](https://hashscan.io/testnet/transaction/0.0.10719536%401790368579.022184355), and [paid standing after revocation](https://hashscan.io/testnet/transaction/0.0.7162784%401790368604.066112463). The second verified report returned `agentKeyActive: false`. A live SAUCE → WHBAR read-only quote succeeded between payment and revocation. The configured USDC swap failed before signing because no pool exists; after revocation it failed with `AGENT_KEY_INACTIVE`. This fresh-scaffold run used the published template at commit `7f7c412` before the subsequent API startup preflight change.
+**Corrected vault** [`0.0.10764331`](https://hashscan.io/testnet/transaction/0.0.5792828%401790617860.743341105), deployed 28 September 2026 with the same 0.01-HBAR per-transaction and 0.05-HBAR UTC-day terms: [funding](https://hashscan.io/testnet/transaction/0.0.5792828%401790617873.087150801), [agent spend](https://hashscan.io/testnet/transaction/0.0.10715883%401790617885.660720931), [pause](https://hashscan.io/testnet/transaction/0.0.10715881%401790617906.222816585), rejection of a later client spend, [recovery](https://hashscan.io/testnet/transaction/0.0.10715881%401790618001.365508847) and [vault-agent revocation](https://hashscan.io/testnet/transaction/0.0.10715881%401790618011.616088337). The legacy vault's zero balance was confirmed before its local state was archived.
 
-## Current integration limits
+**Browser vault controls** — all four approved through HashPack and checked against mirror receipts for vault `0.0.10764331`:
 
-The standing API also applies replay protection to payments. Reports expire after two minutes, and missing identity or settlement sources fail closed.
+| Browser action                         | Evidence                                                                                                                                                                                                          |
+| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unpause (29 September 2026)            | [Guardian transaction](https://hashscan.io/testnet/transaction/0.0.10715881%401790681811.389604462), exact `setPaused(false)` call                                                                                |
+| Pause (30 September 2026)              | [Guardian transaction](https://hashscan.io/testnet/transaction/0.0.10715881%401790767897.005691536), exact `setPaused(true)` call                                                                                 |
+| Recover (30 September 2026)            | [Guardian transaction](https://hashscan.io/testnet/transaction/0.0.10715881%401790768206.464550186), exact `recover(guardian)` call; 1,000,000 tinybars returned to the guardian, which also paid the network fee |
+| Revoke vault agent (30 September 2026) | [Guardian transaction](https://hashscan.io/testnet/transaction/0.0.10715881%401790768402.243390677), exact `setAgent(address(0))` call                                                                            |
 
-The SaucerSwap V1 router `0.0.19264` exists on testnet, but there is no V1 or V2 USDC → WHBAR pool at the configured addresses. New scaffolds use the verified SAUCE → WHBAR V1 pool instead. On 25 September 2026, [the operator bought 54.935622 SAUCE for the agent with 1 HBAR](https://hashscan.io/testnet/transaction/0.0.5792828%401790369426.644109430), and [the policy-checked agent swapped 1 SAUCE for 0.01809430 WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790369523.124021573), then [published the fill](https://hashscan.io/testnet/transaction/0.0.10715883%401790369529.955985574). Hedera reports the HTS transfers on the contract call's child nonces; the adapter checks those mirror rows and the router parent before accepting a fill. `quote-fallback 1000000` remains a read-only pool check. A forked-mainnet execution has not been demonstrated. A Hardhat 3 fork of `https://mainnet.hashio.io/api` loaded chain 295 and the mainnet SaucerSwap router bytecode, but local router calls failed because the fork lacked Hedera's hardfork activation history. The Hedera system-contract forking plugin currently declares a Hardhat 2 peer dependency, so this attempt is not counted as execution. The real testnet swap above is the execution evidence.
+The recovery trial used [0.01 HBAR of operator funding](https://hashscan.io/testnet/transaction/0.0.5792828%401790768130.738559684). Before the browser revocation trial, the [local guardian restored the vault agent](https://hashscan.io/testnet/transaction/0.0.10715881%401790768329.857390374) while the vault was paused and empty; that was a CLI-signed transaction, not a browser approval. Afterwards the mirror showed `paused = true`, a zero-address vault agent and a zero balance. Native account `0.0.10715883` stayed active: vault actions affect only the vault.
 
-The card's default standing endpoint is `localhost:3001`, for local development only. Set a reachable URL before registration for a public paid endpoint.
+**Version 3 standing** — on 29 September 2026, [a paid standing request](https://hashscan.io/testnet/transaction/0.0.7162784%401790661109.480107192) returned a version 3 report for vault `0.0.10764331` with its approved caps and recipient, paused state, revoked vault agent and zero balance. A network error interrupted the buyer's final verification; the saved report was recovered without another payment, its EIP-712 signature verified at its issuance time, and its exact USDC settlement confirmed on the mirror. This is historical evidence, not an unexpired report.
 
-## Validation
+### Second deployment from a fresh public scaffold
 
-`npm run check` runs lint, TypeScript, deterministic unit/integration tests, local Solidity execution tests, and production builds. Tests do not require funded accounts.
+[Agent account `0.0.10719538`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368400.901918984), [HCS topic `0.0.10719539`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368403.419699553), [policy `0.0.10719558`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368452.706297608), [ERC-8004 agent `122`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368490.311414726), [paid standing](https://hashscan.io/testnet/transaction/0.0.7162784%401790368535.441608179), [guardian revocation](https://hashscan.io/testnet/transaction/0.0.10719536%401790368579.022184355) and [paid standing after revocation](https://hashscan.io/testnet/transaction/0.0.7162784%401790368604.066112463), which returned `agentKeyActive: false`. A live SAUCE → WHBAR quote succeeded between payment and revocation; the configured USDC swap failed before signing because no pool exists, and after revocation failed with `AGENT_KEY_INACTIVE`. This run used the published template at commit `7f7c412`. The same revoked agent was later reattached with `adopt` from another fresh scaffold without submitting a transaction.
 
-On 30 September 2026, the public template at code release `565bd8c` was scaffolded using the explicit options in the setup command above. After repairing workspace dependency links following a session interruption, the fresh copy passed `npm run check`: 55 TypeScript tests, five Solidity execution tests, lint, type checking and production builds. An earlier fresh copy of the same implementation also passed demo HTTP checks: dashboard, health and status returned 200; unconfigured standing and vault routes returned unpaid 503. These local checks are separate from the real testnet receipts above; no forked-mainnet execution is claimed.
+### SaucerSwap
 
-| Package              | Role                                                                                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `packages/agent`     | CLI, local setup runtime for browser onboarding, key-isolated onboarding, agreement approval, policy guard, vault commands, swap adapter, guardian actions |
-| `packages/shared`    | Mirror/HCS readers, identity validation, UAID, agreement hashing, vault-terms compiler, SQLite state                                                       |
-| `packages/server`    | Hono API, x402 settlement, signed standing                                                                                                                 |
-| `packages/contracts` | `PolicyRegistry` (client-enforced policy configuration) and `GuardedHbarVault` (contract-enforced HBAR custody)                                            |
-| `packages/nextjs`    | Dashboard: synthetic demo, browser setup, live testnet status and guardian wallet controls                                                                 |
+The V1 router `0.0.19264` exists on testnet, but there is no USDC → WHBAR pool, so new scaffolds use the SAUCE → WHBAR V1 pool. On 25 September 2026 [the operator bought 54.935622 SAUCE for the agent with 1 HBAR](https://hashscan.io/testnet/transaction/0.0.5792828%401790369426.644109430), [the policy-checked agent swapped 1 SAUCE for 0.01809430 WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790369523.124021573) and [published the fill](https://hashscan.io/testnet/transaction/0.0.10715883%401790369529.955985574). Hedera reports the HTS transfers on the contract call's child nonces; the adapter checks those rows and the router parent before accepting a fill.
 
-Sources: [bounty brief](https://hedera.com/blog/scaffold-hbar-template-bounty/), [Scaffold-HBAR CLI](https://github.com/hedera-dev/create-scaffold-hbar), [Hedera SDK deployment guide](https://hedera.com/blog/how-to-deploy-smart-contracts-on-hedera-part-1-a-simple-getter-and-setter-contract/), [SaucerSwap contracts](https://docs.saucerswap.finance/developers/contracts.md), [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004), [Blocky402 API](https://blocky402.com/docs/api-reference/).
+A forked-mainnet execution has **not** been demonstrated: a Hardhat 3 fork of `https://mainnet.hashio.io/api` loaded the mainnet router bytecode, but calls failed because the fork lacked Hedera's hardfork history, and the Hedera forking plugin declares a Hardhat 2 peer dependency.
 
-MIT licensed.
+### Local validation
+
+On 30 September 2026 the public template at `565bd8c` was scaffolded with the full command and passed `npm run check` (55 TypeScript tests, five Solidity execution tests, lint, type checking, builds); an earlier fresh copy passed the demo smoke check. These local checks are separate from the testnet receipts above.
+
+---
+
+## Links
+
+- [Scaffold-HBAR CLI](https://github.com/hedera-dev/create-scaffold-hbar) · [bounty brief](https://hedera.com/blog/scaffold-hbar-template-bounty/)
+- [Hedera documentation](https://docs.hedera.com/) · [Get testnet HBAR](https://portal.hedera.com/)
+- [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) · [Blocky402 API](https://blocky402.com/docs/api-reference/) · [SaucerSwap contracts](https://docs.saucerswap.finance/developers/contracts.md)
+- [Hedera SDK contract deployment guide](https://hedera.com/blog/how-to-deploy-smart-contracts-on-hedera-part-1-a-simple-getter-and-setter-contract/)
+
+---
+
+## License
+
+MIT
