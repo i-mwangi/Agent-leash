@@ -67,9 +67,12 @@ export function SetupWizard() {
     const timer=setInterval(()=>void refresh(),2500);
     return ()=>clearInterval(timer);
   },[state?.running,refresh]);
-  // Once setup is done, wait for the API to verify the deployment, then load the live dashboard.
+  // Reload into the live dashboard only when setup finishes while this page watches. A page
+  // opened after setup already shows live data, so reloading it would only loop back here.
+  const sawIncomplete=useRef(false);
+  if(progress && progress.stage!=='done' && progress.stage!=='cli') sawIncomplete.current=true;
   useEffect(()=>{
-    if(progress?.stage!=='done') return;
+    if(progress?.stage!=='done' || !sawIncomplete.current) return;
     let cancelled=false;
     void (async()=>{
       for(let i=0;i<12 && !cancelled;i++){
@@ -182,7 +185,7 @@ export function SetupWizard() {
     {state.lastError&&!state.running&&<p role="alert">Setup stopped: <code>{state.lastError}</code>. {state.lastError.includes('INSUFFICIENT')?'The setup account needs more HBAR; send some from the guardian account, then retry.':'Retry after checking the message.'} <button className="secondary" disabled={busy} onClick={()=>void perform(async()=>{setState(await api('/setup/advance',{method:'POST'}));})}>Retry</button></p>}
     {stage==='fund'&&<p>The guardian creates the setup account with <strong>{hbar(progress.fundingTinybars)} HBAR</strong>. It pays for the agent account, HCS records, policy deployment and ERC-8004 registration (about 30 HBAR); the rest stays in the setup account.</p>}
     {stage==='agreement'&&progress.agreement&&<div className="notice"><strong>Agreement to approve</strong><p>Scope: client-enforced technical policy, not a legal agreement. Asset {String(progress.agreement.terms.spendAsset)}; at most {String(progress.agreement.terms.maxPerTx)} per transaction and {String(progress.agreement.terms.maxPerDay)} per UTC day (raw units); policy {String(progress.agreement.terms.policyContract)}.</p><p>Hash <code>{progress.agreement.hash}</code>. Approving publishes these exact terms to the agent's HCS topic from your guardian account.</p></div>}
-    {stage==='done'&&<p role="status">Setup complete: agent <a href={`https://hashscan.io/testnet/account/${progress.deployment?.agentAccount}`} target="_blank" rel="noreferrer">{progress.deployment?.agentAccount}</a>, ERC-8004 ID {progress.deployment?.erc8004AgentId}. Loading the live dashboard once the API has verified it…</p>}
+    {stage==='done'&&<p role="status">Setup complete: agent <a href={`https://hashscan.io/testnet/account/${progress.deployment?.agentAccount}`} target="_blank" rel="noreferrer">{progress.deployment?.agentAccount}</a>, ERC-8004 ID {progress.deployment?.erc8004AgentId}. {sawIncomplete.current?'Loading the live dashboard once the API has verified it…':'The dashboard shows its live testnet data.'}</p>}
     {pending&&<p>Waiting for <a href={`https://hashscan.io/testnet/transaction/${encodeURIComponent(pending.transactionId)}`} target="_blank" rel="noreferrer">{pending.stage} transaction</a> to reach the mirror. It will not be resubmitted.</p>}
     {!PROJECT_ID&&<p role="alert">Set <code>NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID</code> in <code>packages/nextjs/.env.local</code> and restart the dashboard to connect HashPack.</p>}
     <div className="create-agent-actions">
