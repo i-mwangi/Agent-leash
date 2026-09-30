@@ -8,6 +8,20 @@ import { resolve } from 'node:path';
 import { ROOT } from '../../shared/src/files';
 import { createSecretFile } from './runtime';
 
+// Scaffold-HBAR prints its own fixed banner; this is the project's, shown on every `npm run dev`.
+const BANNER=[
+  "                          _        _    _                         _",
+  "  __ _ __ __ ___ _  _ _ _| |_ __ _| |__| |___   __ _ __ _ ___ _ _| |_",
+  " / _` / _/ _/ _ \\ || | ' \\  _/ _` | '_ \\ / -_) / _` / _` / -_) ' \\  _|",
+  " \\__,_\\__\\__\\___/\\_,_|_||_\\__\\__,_|_.__/_\\___| \\__,_\\__, \\___|_||_\\__|",
+  "                                                    |___/",
+];
+const color=process.stdout.isTTY && !process.env.NO_COLOR;
+const green=(text:string)=>color?`\x1b[32m${text}\x1b[0m`:text;
+console.log(`\n${green(BANNER.join('\n'))}`);
+console.log('  Guardian-controlled AI agents on Hedera testnet');
+console.log('  Dashboard http://localhost:3000  ·  set up your agent under Create agent\n');
+
 const created:string[]=[];
 function ensure(role:'operator'|'agent'|'server',contents:()=>string) {
   if(existsSync(resolve(ROOT,`.env.${role}`))) return;
