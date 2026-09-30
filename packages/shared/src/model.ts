@@ -15,6 +15,8 @@ export const deploymentSchema = z.object({
   standingBaseUrl: z.string().url().default('http://localhost:3001'),
   routerId: entityId.default('0.0.19264'),
   spendAsset: entityId.default('0.0.429274'), outputAsset: entityId.default('0.0.15058'),
+  // 'wallet': the guardian signs in a browser wallet; no guardian key exists in this workspace.
+  guardianMode: z.enum(['local','wallet']).optional(),
 });
 export type Deployment = z.infer<typeof deploymentSchema>;
 export const eventSchema = z.object({

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createLiveReader, type Snapshot } from './live-data';
 import { GuardianWallet } from './guardian-wallet';
+import { SetupWizard } from './setup-wizard';
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -436,19 +437,11 @@ export default function Home() {
               <h2>A wallet with two independent keys</h2>
               <p>
                 Create a Hedera account with a 1-of-2 threshold: the agent can
-                sign, and the guardian can revoke its access.
+                sign, and the guardian can revoke its access. Setup also gives
+                it an HCS profile, a policy contract, an ERC-8004 identity and a
+                guardian-approved agreement.
               </p>
-              <ol>
-                <li>Generate the agent key inside the agent runtime.</li>
-                <li>Connect a separate guardian wallet.</li>
-                <li>Create and fund the account on testnet.</li>
-                <li>
-                  Verify the threshold and both keys through the mirror node.
-                </li>
-              </ol>
-              <div className="notice">
-                {live?.deployment?.agentAccount?<>Live account <a href={`https://hashscan.io/testnet/account/${live.deployment.agentAccount}`} target="_blank" rel="noreferrer">{live.deployment.agentAccount}</a> is deployed. The browser never receives its keys.</>:'Run npm run agent -- onboard in the isolated CLI to create a live testnet account; review its agreement draft before approving. This page does not hold spend keys.'}
-              </div>
+              <SetupWizard/>
             </section>
           )}
           {live?.mode==='testnet' && live.deployment && <section className="panel detail" style={{display:tab==='Policy'?undefined:'none'}}><h2>Live guardian controls</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void reader.current?.refresh();}}/></section>}

@@ -1,11 +1,12 @@
 "use client";
 import { VaultWallet } from './vault-wallet';
+import { WALLETCONNECT_PROJECT_ID } from './wallet-config';
 import { useEffect, useRef, useState } from 'react';
 
 type Deployment={agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string};
 type PendingEvent={action:'pause'|'unpause'|'revoke';transactionId:string;message:string;hcsTransactionId?:string};
 type WalletConnector=import('@hashgraph/hedera-wallet-connect').DAppConnector;
-const PROJECT_ID=process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID;
+const PROJECT_ID=WALLETCONNECT_PROJECT_ID;
 
 /** All signatures are requested from the connected testnet guardian wallet in the browser. */
 export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;onConfirmed:()=>void}) {

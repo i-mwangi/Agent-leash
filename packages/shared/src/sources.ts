@@ -4,7 +4,7 @@ import { AppError, evmAddress, type Deployment, type ConsensusEvent } from './mo
 import { accountKeyState } from './keys';
 import { agentData, createUaid } from './uaid';
 import type { PolicySnapshot } from '../../agent/src/policyClient';
-import { verifyAgreement } from './agreement';
+import { verifyRecordedAgreement } from './agreement';
 export const POLICY_ABI=new Interface(['function guardian() view returns(address)','function agentAccount() view returns(string)','function paused() view returns(bool)','function maxPerTx() view returns(uint256)','function maxPerDay() view returns(uint256)','function allowedTokens(string) view returns(bool)','function pause()','function unpause()','function setCaps(uint256,uint256)','function setAllowedTokens(string[],bool)']);
 export const IDENTITY_ABI=new Interface(['function register(string) returns(uint256)','function tokenURI(uint256) view returns(string)','function ownerOf(uint256) view returns(address)','function setAgentURI(uint256,string)','event Registered(uint256 indexed agentId,string agentURI,address indexed owner)']);
 export function makeCard(d:Deployment) {
@@ -44,7 +44,7 @@ export async function readFacts(d:Deployment,mirror:Mirror,enforceAgreement=true
   if(recorded) {
     if(recorded.publisher!==d.guardianId) throw new AppError('AGREEMENT_PUBLISHER_MISMATCH');
     let signed;
-    try { signed=verifyAgreement(recorded.payload,guardianInfo.evm_address); }
+    try { signed=verifyRecordedAgreement(recorded.payload,guardianInfo.evm_address,recorded.publisher===d.guardianId); }
     catch { throw new AppError('AGREEMENT_SIGNATURE_INVALID'); }
     const terms=signed.agreement;
     if(enforceAgreement && (terms.agentAccount!==account || terms.guardianAccount!==d.guardianId || terms.policyContract.toLowerCase()!==policy.toLowerCase() || terms.spendAsset!==d.spendAsset || BigInt(terms.maxPerTx)!==BigInt(perTx[0]) || BigInt(terms.maxPerDay)!==BigInt(perDay[0]))) throw new AppError('AGREEMENT_POLICY_MISMATCH');

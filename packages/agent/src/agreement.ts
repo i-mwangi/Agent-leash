@@ -18,7 +18,7 @@ function identity(d:Deployment) {
 function terms(d:Deployment,facts:Awaited<ReturnType<typeof readFacts>>,version:number):Agreement {
   return agreementSchema.parse({version,scope:'client-enforced',agentAccount:d.agentAccount,guardianAccount:d.guardianId,policyContract:d.policyAddress,spendAsset:d.spendAsset,maxPerTx:facts.maxPerTx.toString(),maxPerDay:facts.maxPerDay.toString()});
 }
-async function currentTerms() {
+export async function currentTerms() {
   const d=readDeployment();
   if(!d?.agentAccount || !d.guardianId || !d.policyAddress || !d.hcsTopic || !d.erc8004AgentId) throw new AppError('SETUP_REQUIRED');
   const mirror=new Mirror();
@@ -50,6 +50,7 @@ export async function approveAgreement() {
   const {d,mirror,agreement,approved}=await currentTerms();
   if(approved) return {alreadyApproved:true,hash:agreementHash(agreement),version:agreement.version};
   if(canonicalAgreement(reviewed)!==canonicalAgreement(agreement)) throw new AppError('AGREEMENT_DRAFT_STALE');
+  if(d.guardianMode==='wallet') throw new AppError('GUARDIAN_WALLET_APPROVES_IN_BROWSER');
   const key=roleKey('guardian');
   if(key.publicKey.toStringRaw()!==d.guardianPublicKey) throw new AppError('GUARDIAN_KEY_MISMATCH');
   const wallet=new Wallet('0x'+key.toStringRaw());

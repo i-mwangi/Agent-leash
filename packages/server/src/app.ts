@@ -18,17 +18,21 @@ export const demoPolicy: PolicySnapshot = {
   pendingToday: 0n,
   balance: 8_000_000n,
 };
-export function createApp(mode = "demo", services:()=>LiveServices|null=()=>null) {
+/** `modeInput` may be a getter: in auto mode the API moves from demo to testnet once setup completes. */
+export function createApp(modeInput:string|(()=>string) = "demo", services:()=>LiveServices|null=()=>null) {
+  const currentMode=()=>typeof modeInput==='function'?modeInput():modeInput;
   const app = new Hono();
   app.onError((error,c)=>c.json({error:error instanceof AppError?error.code:'SOURCE_UNAVAILABLE',paymentRequired:false},error instanceof AppError?error.status:503));
   app.use('*',async(c,next)=>{c.header('Cache-Control','no-store');await next();});
   app.get("/health", async c=>{
+    const mode=currentMode();
     const live=mode==='testnet'?services():null;
     let sourcesReady=false;
     if(live) try{await live.ready(live.deployment.agentAccount??'');sourcesReady=true;}catch{ /* Report unavailable, never claim readiness. */ }
     return c.json({ok:true,mode,network:'testnet',liveAdaptersReady:sourcesReady});
   });
   app.get("/status", async c=>{
+    const mode=currentMode();
     const live=mode==='testnet'?services():null;
     let identityReady=false,paymentChallengeReady=false,dexQuoteReady=false;
     if(live) {
@@ -45,7 +49,7 @@ export function createApp(mode = "demo", services:()=>LiveServices|null=()=>null
     ]});
   });
   app.post("/demo/policy/preview", async (c) => {
-    if (mode !== "demo") return c.json({ error: "DEMO_DISABLED" }, 404);
+    if (currentMode() !== "demo") return c.json({ error: "DEMO_DISABLED" }, 404);
     let body: Record<string, unknown>;
     try {
       body = await c.req.json();
@@ -74,14 +78,14 @@ export function createApp(mode = "demo", services:()=>LiveServices|null=()=>null
       transactionSubmitted: false,
     });
   });
-  app.get('/deployment',c=>c.json({deployment:readDeployment(),configured:!!services(),mode}));
+  app.get('/deployment',c=>c.json({deployment:readDeployment(),configured:!!services(),mode:currentMode()}));
   app.get('/agent/status',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
     const facts=await live.ready(live.deployment.agentAccount??'');
     return c.json(jsonSafe(facts));
   });
   app.get('/vault/status',async c=>{
-    const live=mode==='testnet'?services():null;if(!live?.vault) throw new AppError('SOURCES_NOT_CONFIGURED');
+    const live=currentMode()==='testnet'?services():null;if(!live?.vault) throw new AppError('SOURCES_NOT_CONFIGURED');
     return c.json({vault:await live.vault()});
   });
   app.get('/policy/snapshot',async c=>{

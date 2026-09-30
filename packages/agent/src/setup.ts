@@ -54,21 +54,28 @@ export async function publish(d:Deployment,type:ProfileEvent['type'],payload:Rec
   const client=clientFor(payer,roleKey(role));
   try{return await nativeOperation(name,new TopicMessageSubmitTransaction().setTopicId(d.hcsTopic).setMessage(content),client,store);}finally{client.close();}
 }
-export async function setup() {
-  const d=await initialize(); const store=new Store(resolve(DATA,'operator.sqlite'));
+/** A guardian-wallet step the browser must complete before setup can continue. */
+export type WalletStep='topic'|'allow';
+export async function setup():Promise<Deployment&{waitingFor?:WalletStep}> {
+  const existing=readDeployment();
+  const wallet=existing?.guardianMode==='wallet';
+  const d=wallet?existing!:await initialize(); const store=new Store(resolve(DATA,'operator.sqlite'));
   const mirror=new Mirror(); const operator=roleKey('operator'); const client=clientFor(d.operatorId,operator);
   try { return await store.exclusive('setup',async()=>{
     if(!d.guardianId) {
+      if(wallet) throw new AppError('GUARDIAN_WALLET_NOT_SELECTED');
       const guardian=roleKey('guardian');
       const created=await nativeOperation('create-guardian',new AccountCreateTransaction().setKeyWithoutAlias(guardian.publicKey).setAlias(guardian.publicKey.toEvmAddress()).setInitialBalance(new Hbar(10)).setMaxAutomaticTokenAssociations(5),client,store,[guardian]);
       d.guardianId=created.accountId!; saveDeployment(d);
     }
     if(!d.agentAccount) {
-      const created=await nativeOperation('create-agent',new AccountCreateTransaction().setKeyWithoutAlias(new KeyList([PublicKey.fromStringECDSA(d.agentPublicKey),PublicKey.fromStringECDSA(d.guardianPublicKey)],1)).setInitialBalance(new Hbar(10)).setMaxAutomaticTokenAssociations(5),client,store);
+      const created=await nativeOperation('create-agent',new AccountCreateTransaction().setKeyWithoutAlias(new KeyList([PublicKey.fromStringECDSA(d.agentPublicKey),PublicKey.fromStringECDSA(d.guardianPublicKey)],1)).setInitialBalance(new Hbar(wallet?5:10)).setMaxAutomaticTokenAssociations(5),client,store);
       d.agentAccount=created.accountId!; saveDeployment(d);
     }
     const account=await mirror.account(d.agentAccount);
     accountKeyState(account.key,d.agentPublicKey,d.guardianPublicKey);
+    // Its admin key is the guardian's, so a wallet guardian creates the topic in the browser.
+    if(!d.hcsTopic && wallet) return {...d,waitingFor:'topic' as const};
     if(!d.hcsTopic) {
       const created=await nativeOperation('create-topic',new TopicCreateTransaction().setTopicMemo('Accountable Agent v1').setAdminKey(PublicKey.fromStringECDSA(d.guardianPublicKey)).setSubmitKey(new KeyList([operator.publicKey,PublicKey.fromStringECDSA(d.guardianPublicKey),PublicKey.fromStringECDSA(d.agentPublicKey)],1)),client,store,[roleKey('guardian')]);
       d.hcsTopic=created.topicId!; saveDeployment(d);
@@ -87,8 +94,10 @@ export async function setup() {
       const policy=await nativeOperation('deploy-policy',new ContractCreateTransaction().setBytecodeFileId(file.fileId!).setGas(1_500_000).setConstructorParameters(getBytes(args)),client,store);
       d.policyContractId=policy.contractId!;d.policyAddress=evmAddress(policy.contractId!);saveDeployment(d);
     }
-    const guardianClient=clientFor(d.guardianId,roleKey('guardian'));
-    try { await nativeOperation('policy-allow-usdc',new ContractExecuteTransaction().setContractId(d.policyContractId!).setGas(300000).setFunctionParameters(getBytes(POLICY_ABI.encodeFunctionData('setAllowedTokens',[[d.spendAsset],true]))),guardianClient,store); }finally{guardianClient.close();}
+    if(!wallet) {
+      const guardianClient=clientFor(d.guardianId,roleKey('guardian'));
+      try { await nativeOperation('policy-allow-usdc',new ContractExecuteTransaction().setContractId(d.policyContractId!).setGas(300000).setFunctionParameters(getBytes(POLICY_ABI.encodeFunctionData('setAllowedTokens',[[d.spendAsset],true]))),guardianClient,store); }finally{guardianClient.close();}
+    }
     await publish(d,'policy',{address:d.policyAddress},'operator','hcs-policy',store);
     const agentClient=clientFor(d.agentAccount,roleKey('agent'));
     try {
@@ -97,6 +106,8 @@ export async function setup() {
         if(!associations.tokens.some(t=>t.token_id===token)) await nativeOperation('associate-'+token,new TokenAssociateTransaction().setAccountId(d.agentAccount).setTokenIds([token]),agentClient,store);
       }
     } finally{agentClient.close();}
+    // A wallet guardian allows the spend asset in the browser; the policy contract is the record.
+    if(wallet && !(await mirror.call(d.policyAddress,POLICY_ABI,'allowedTokens',[d.spendAsset]))[0]) return {...d,waitingFor:'allow' as const};
     console.log('Account, profile, UAID and policy configured.'); return d;
   });}finally{client.close();store.close();}
 }

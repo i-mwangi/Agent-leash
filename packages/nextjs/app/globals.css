@@ -604,6 +604,73 @@ footer span span {
 .detail .notice {
   margin-bottom: 0;
 }
+.create-agent-form {
+  margin-top: 24px;
+  border-top: 1px solid #eff1eb;
+  padding-top: 22px;
+}
+.create-agent-form h3 {
+  font-family: Manrope, sans-serif;
+  font-size: 14px;
+  margin: 0 0 7px;
+}
+.create-agent-form label {
+  margin-top: 16px;
+}
+.create-agent-actions {
+  display: grid;
+  grid-template-columns: minmax(150px, auto) minmax(220px, 1fr) auto;
+  gap: 10px;
+  margin-top: 18px;
+}
+.create-agent-actions .primary {
+  width: auto;
+  justify-content: center;
+}
+.boundary-note {
+  border-left: 3px solid #b8c7aa;
+  padding-left: 12px;
+}
+.setup-steps {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+  display: grid;
+  gap: 8px;
+}
+.setup-step {
+  display: grid;
+  grid-template-columns: 26px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  color: #6b7466;
+}
+.setup-step span {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid #d6dccd;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+}
+.setup-step small {
+  font-size: 12px;
+  color: #8a9384;
+}
+.setup-step.done span {
+  background: #2f5d3a;
+  border-color: #2f5d3a;
+  color: #fff;
+}
+.setup-step.current {
+  color: #1d2a1f;
+  font-weight: 600;
+}
+.setup-step.current span {
+  border-color: #2f5d3a;
+  color: #2f5d3a;
+}
 @media (min-width: 1500px) {
   .content {
     padding-top: 52px;
@@ -644,6 +711,11 @@ footer span span {
   }
   h1 {
     font-size: 29px;
+  }
+}
+@media (max-width: 760px) {
+  .create-agent-actions {
+    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 720px) {
