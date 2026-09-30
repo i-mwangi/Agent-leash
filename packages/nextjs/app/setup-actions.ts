@@ -37,6 +37,29 @@ export async function checkWalletTransaction(transactionId:string,submittedAt:nu
   return parent.result==='SUCCESS'?'success':'failed';
 }
 
+/** Tinybars the guardian needs for a wallet step: the setup funding plus a fee margin, or a fee margin. */
+export function requiredTinybars(stage:'fund'|'topic'|'allow'|'agreement',fundingTinybars:string) {
+  const feeMargin=100_000_000n; // 1 HBAR; each step's network fee is well below this
+  return stage==='fund'?BigInt(fundingTinybars)+feeMargin:feeMargin;
+}
+
+/** Current guardian balance in tinybars, or null when the mirror cannot answer (the wallet then decides). */
+export async function guardianBalance(account:string,fetcher:typeof fetch=fetch):Promise<bigint|null> {
+  try {
+    const response=await fetcher(`${MIRROR}/accounts/${account}`,{cache:'no-store'});
+    if(!response.ok) return null;
+    const body=await response.json() as {balance?:{balance?:number|string}};
+    return body.balance?.balance===undefined?null:BigInt(body.balance.balance);
+  } catch { return null; }
+}
+
+/** True when the wallet explicitly declined: the transaction was never signed, so it cannot reach Hedera. */
+export function walletRejected(error:unknown) {
+  const text=error instanceof Error?`${error.name} ${error.message}`:(()=>{try{return JSON.stringify(error,Object.getOwnPropertyNames(error??{}));}catch{return String(error);}})();
+  const code=(error as {code?:unknown})?.code;
+  return code===4001 || code===5000 || /reject|declin|denied|cancel/i.test(text);
+}
+
 /**
  * Re-derive the agreement hash in the browser and check the HCS message carries exactly the
  * displayed terms for this agent and guardian before the guardian publishes it.

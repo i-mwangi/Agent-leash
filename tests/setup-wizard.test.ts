@@ -5,7 +5,7 @@ import { Wallet } from 'ethers';
 import { agreementHash, signAgreement, verifyRecordedAgreement, walletAgreementPayload, type Agreement } from '../packages/shared/src/agreement';
 import { expectedTopicKeys, topicMatches, type Progress as RuntimeProgress } from '../packages/agent/src/wizard';
 import { createSetupApp, SETUP_HEADER } from '../packages/agent/src/service';
-import { checkWalletTransaction, mirrorTransactionId, verifyAgreementMessage } from '../packages/nextjs/app/setup-actions';
+import { checkWalletTransaction, guardianBalance, mirrorTransactionId, requiredTinybars, verifyAgreementMessage, walletRejected } from '../packages/nextjs/app/setup-actions';
 import { createApp } from '../packages/server/src/app';
 
 const guardianWallet=new Wallet('0x'+'1'.padStart(64,'0'));
@@ -80,6 +80,23 @@ describe('wallet transaction reconciliation',()=>{
     expect(await checkWalletTransaction(id,0,1000,mirror(404))).toBe('unknown');
     expect(await checkWalletTransaction(id,0,300_000,mirror(404))).toBe('expired');
     expect(await checkWalletTransaction(id,0,300_000,mirror(503))).toBe('unknown');
+  });
+});
+
+describe('guardian funding check',()=>{
+  it('requires the setup funding plus a fee margin before asking the wallet',async()=>{
+    expect(requiredTinybars('fund','4500000000')).toBe(4_600_000_000n);
+    expect(requiredTinybars('topic','4500000000')).toBe(100_000_000n);
+    const account=(balance:number)=>async()=>new Response(JSON.stringify({balance:{balance}}),{status:200});
+    expect(await guardianBalance('0.0.7',account(910_081_884))).toBe(910_081_884n);
+    expect(await guardianBalance('0.0.7',async()=>new Response('{}',{status:503}))).toBeNull();
+    expect(await guardianBalance('0.0.7',async()=>{throw new Error('offline');})).toBeNull();
+  });
+  it('treats only explicit wallet rejections as never submitted',()=>{
+    expect(walletRejected({code:5000,message:'User rejected.'})).toBe(true);
+    expect(walletRejected(new Error('Request declined by user'))).toBe(true);
+    expect(walletRejected({})).toBe(false);
+    expect(walletRejected(new Error('Request expired'))).toBe(false);
   });
 });
 

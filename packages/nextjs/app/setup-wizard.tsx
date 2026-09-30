@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { checkWalletTransaction, verifyAgreementMessage, type Progress, type SetupState } from './setup-actions';
+import { checkWalletTransaction, guardianBalance, requiredTinybars, verifyAgreementMessage, walletRejected, type Progress, type SetupState } from './setup-actions';
 import { WALLETCONNECT_PROJECT_ID } from './wallet-config';
 
 type Connector=import('@hashgraph/hedera-wallet-connect').DAppConnector;
@@ -111,6 +111,10 @@ export function SetupWizard() {
       verifyAgreementMessage(g,progress);
       tx=new TopicMessageSubmitTransaction().setTopicId(topic).setMessage(g.message);
     }
+    // Check the guardian can pay before asking the wallet; an unfunded request fails with no detail.
+    const needed=requiredTinybars(stage,progress.fundingTinybars);
+    const balance=await guardianBalance(account);
+    if(balance!==null && balance<needed) throw new Error(`Guardian ${account} has ${hbar(balance.toString())} HBAR; this step needs about ${hbar(needed.toString())} HBAR including fees. Add testnet HBAR at portal.hedera.com/faucet, then try again.`);
     const client=Client.forTestnet();
     try{
       const id=TransactionId.generate(account);
@@ -119,7 +123,11 @@ export function SetupWizard() {
       savePending(record);
       const signer=connector.current.getSigner(AccountId.fromString(account));
       try{await signer.request({method:HederaJsonRpcMethod.SignAndExecuteTransaction,params:{signerAccountId:`hedera:testnet:${account}`,transactionList:transactionToBase64String(tx)}});}
-      catch{setMessage(`The wallet response was unclear. Checking ${record.transactionId} on the mirror before allowing a retry.`);return;}
+      catch(error){
+        // A rejected request was never signed, so it cannot reach Hedera; anything else is reconciled on the mirror.
+        if(walletRejected(error)){savePending(null);setMessage('The request was declined in HashPack. Nothing was submitted; you can try again.');return;}
+        setMessage(`HashPack did not confirm the request. Checking ${record.transactionId} on the mirror before allowing a retry (up to four minutes).`);return;
+      }
       setMessage('Approved in HashPack. Waiting for Hedera confirmation…');
     } finally{client.close();}
   }
