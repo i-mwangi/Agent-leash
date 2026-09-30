@@ -28,6 +28,22 @@ const tabs = [
 type Tab = (typeof tabs)[number];
 type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string;registry?:string;guardianMode?:'local'|'wallet'};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
 const units=(value:string)=>BigInt(value).toLocaleString('en-US');
+/** Plain-language meaning of each policy decision code from packages/agent/src/policyClient.ts. */
+const REASON_TEXT:Record<string,string>={
+  OK:'Within every rule: the agent may sign this payment.',
+  INVALID_AMOUNT:'Enter an amount greater than zero, in raw units.',
+  SOURCE_UNAVAILABLE:'A required live source could not be read, so the agent refuses rather than guess.',
+  NO_POLICY:'No policy contract is configured, so the agent will not pay.',
+  HCS_NOT_READY:'The agent\'s HCS profile is not set up yet.',
+  IDENTITY_MISSING:'The agent\'s ERC-8004 identity is not registered yet.',
+  AGENT_KEY_INACTIVE:'The guardian removed the agent\'s key, so it can no longer sign.',
+  PAUSED:'The guardian paused the policy; the agent refuses every payment until it is unpaused.',
+  ASSET_NOT_ALLOWED:'The policy does not allow spending this token.',
+  OVER_TX_CAP:'The amount is above the per-transaction cap.',
+  OVER_DAY_CAP:'This payment would take today\'s spending above the daily cap.',
+  INSUFFICIENT_BALANCE:'The agent does not hold enough of this token to pay this amount.',
+  API_UNAVAILABLE:'The local API did not answer; check that npm run dev is running.',
+};
 function usagePercent(s:Snapshot){const cap=BigInt(s.maxPerDay);return cap===0n?0:Number((BigInt(s.spentToday)*100n)/cap);}
 export default function Home() {
   const [tab, setTab] = useState<Tab>("Overview");
@@ -370,6 +386,7 @@ export default function Home() {
                           : "Client refuses to sign"}
                       </strong>
                       <span>{result.reason.replaceAll("_", " ")}</span>
+                      {REASON_TEXT[result.reason] && <span>{REASON_TEXT[result.reason]}</span>}
                       <small>
                         {testnet
                           ? "Advisory live check. No transaction was submitted."
