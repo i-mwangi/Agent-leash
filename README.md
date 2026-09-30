@@ -109,7 +109,7 @@ When setup finishes, the API verifies the deployment (identity, HCS records, pol
 - **Agreement approval.** The guardian's wallet publishes the exact terms, their hash and `approval: "guardian-hcs-transaction"` to the agent's topic. The guardian key signs that HCS transaction, and verifiers accept the record only when the mirror shows the guardian account as its payer. The page recomputes the terms hash before asking for approval. It is a technical policy record, not a legal agreement.
 - **WalletConnect.** The template ships a public WalletConnect project ID so HashPack connects from a fresh scaffold. To use your own, set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` in `packages/nextjs/.env.local`.
 
-**Verification status:** on 30 September 2026 the complete flow ran on Hedera testnet from a fresh copy of this code, with the guardian played by a script-held ECDSA key submitting exactly the four transactions the page builds ([evidence](#browser-setup)). The same run passed the API's activation checks, returned a 402 challenge and produced a verified version 2 standing report. **Approval through HashPack itself has not yet been verified for this flow.**
+**Verification status:** on 30 September 2026 the complete flow ran on Hedera testnet from a fresh public scaffold with all four steps **approved in HashPack** ([evidence](#browser-setup)): agent `0.0.10798474`, ERC-8004 agent `125`. The API then verified the deployment and wallet-approved agreement, switched to testnet on its own and returned a 402 standing challenge. An earlier run of the same flow, with a script-held guardian key, also produced a verified version 2 standing report.
 
 ---
 
@@ -307,7 +307,21 @@ All entries below are **real testnet writes**, separate from the demo and from l
 
 ### Browser setup
 
-On 30 September 2026 the browser-setup runtime ran from a fresh copy of this code (no keys or deployment state). A script-held ECDSA key played the HashPack guardian `0.0.10797338` and submitted the same four transactions the page builds; this is **not** a HashPack approval.
+**HashPack run.** On 30 September 2026 a fresh public scaffold was set up entirely in the browser. Guardian `0.0.10715881` approved all four steps in HashPack; the local agent runtime did the rest.
+
+| Step                          | Evidence                                                                                                                                                                                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HashPack: fund setup account  | [45 HBAR account creation](https://hashscan.io/testnet/transaction/0.0.10715881%401790805106.982244281), setup account `0.0.10798471`                                                                                                                                   |
+| Runtime: create agent account | [1-of-2 agent `0.0.10798474`](https://hashscan.io/testnet/transaction/0.0.10798471%401790805124.960715885)                                                                                                                                                              |
+| HashPack: create HCS topic    | [topic `0.0.10798482`](https://hashscan.io/testnet/transaction/0.0.10715881%401790805194.818428388)                                                                                                                                                                     |
+| Runtime: deploy policy        | [policy `0.0.10798534`](https://hashscan.io/testnet/transaction/0.0.10798471%401790805484.394915383)                                                                                                                                                                    |
+| HashPack: allow spend asset   | [`setAllowedTokens`](https://hashscan.io/testnet/transaction/0.0.10715881%401790805529.772818896)                                                                                                                                                                       |
+| Runtime: register ERC-8004    | [agent `125`](https://hashscan.io/testnet/transaction/0.0.10798471%401790805543.885864012), [card update](https://hashscan.io/testnet/transaction/0.0.10798471%401790805548.366782068)                                                                                  |
+| HashPack: approve agreement   | [guardian-published HCS record](https://hashscan.io/testnet/transaction/0.0.10715881%401790805576.599885166), hash `0xbece15d44ceebc5a16dc2dab066a051777480b7bd55e4709360be17845e22f89`; the API verified it, switched to testnet and returned a 402 standing challenge |
+
+Setup used 28.7 of the 45 HBAR. No paid standing request was made for this agent: its setup account holds no USDC.
+
+**Scripted run.** Earlier the same day the runtime ran from a fresh copy of this code (no keys or deployment state), with a script-held ECDSA key playing the guardian `0.0.10797338` and submitting the same four transactions the page builds.
 
 | Step                          | Evidence                                                                                                                                                                                                                                                     |
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
