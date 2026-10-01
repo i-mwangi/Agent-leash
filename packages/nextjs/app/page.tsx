@@ -4,6 +4,7 @@ import { createLiveReader, tokenAmount, type Snapshot, type SpendToken } from '.
 import { GuardianWallet } from './guardian-wallet';
 import { SetupWizard } from './setup-wizard';
 import { OverviewSummary } from './overview';
+import { StandingPanel } from './standing-panel';
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -541,18 +542,7 @@ export default function Home() {
             );
           })()}
           {tab === "Standing" && (
-            <section className="panel detail">
-              <h2>Paid, verifiable standing</h2>
-              <p>
-                A signed report will describe the agent’s identity, policy, and
-                key status. Payment must be confirmed on the Hedera mirror node
-                before a report is issued.
-              </p>
-              <code>GET /standing/:id</code>
-              <div className="notice">
-                {live?.mode==='testnet' && live.deployment?.agentAccount?<>The live endpoint returns an x402 payment challenge. Run <code>npm run agent -- pay-standing</code> from the isolated CLI to pay and verify the report. Standing signs the guardian-approved HCS policy record when present. With a configured vault, version 3 also signs its verified rules, balance, pause and agent status.</>:'In demo mode, standing remains unavailable; no payment is requested.'}
-              </div>
-            </section>
+            <StandingPanel testnet={testnet} agentAccount={live?.deployment?.agentAccount} agreementVersion={live?.agreement?.version} />
           )}
           {tab === 'Optional DEX' && !testnet && <section className="panel detail">
             <h2>Optional SaucerSwap testnet route</h2>

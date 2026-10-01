@@ -938,3 +938,11 @@ details.technical[open] summary {
 .detail.compact {
   min-height: 0;
 }
+
+.standing-facts {
+  margin-bottom: 18px;
+}
+.standing-facts > div {
+  display: grid;
+  gap: 3px;
+}
