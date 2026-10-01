@@ -86,7 +86,7 @@ export function InferenceSettings({ onSaved }: { onSaved: () => void }) {
         </select>
       </label>
       <label>API key{keepKey && " (saved; leave empty to keep it)"}
-        <div className="amount-field"><input type="password" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder={keepKey ? "••••••••  saved" : "Paste the key here, not in chat"} autoComplete="new-password" spellCheck={false} /></div>
+        <div className="amount-field"><input type="password" value={apiKey} onChange={event => setApiKey(event.target.value)} placeholder={keepKey ? "••••••••  saved" : "Paste the key here"} autoComplete="new-password" spellCheck={false} /></div>
         <small>{KEY_HELP[provider]} It is written to .env.server on this computer, which git ignores, and is never shown again.</small>
       </label>
       {provider === "openai-compatible" && <label>Base URL<div className="amount-field"><input value={baseUrl} onChange={event => setBaseUrl(event.target.value)} placeholder="https://api.groq.com/openai/v1" /></div></label>}
