@@ -2,10 +2,11 @@
 import { VaultWallet } from './vault-wallet';
 import { WALLETCONNECT_PROJECT_ID } from './wallet-config';
 import { connectWallet, disconnectWallet, restoredAccounts, signerFor } from './wallet-session';
+import { checkWalletTransaction, walletRejected } from './setup-actions';
 import { useEffect, useState } from 'react';
 
 type Deployment={agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;guardianMode?:'local'|'wallet'};
-type PendingEvent={action:'pause'|'unpause'|'revoke';transactionId:string;message:string;hcsTransactionId?:string};
+type PendingEvent={action:'pause'|'unpause'|'revoke';transactionId:string;message:string;hcsTransactionId?:string;hcsSubmittedAt?:number};
 const PROJECT_ID=WALLETCONNECT_PROJECT_ID;
 
 /** All signatures are requested from the connected testnet guardian wallet in the browser. */
@@ -101,7 +102,15 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
       return false;
     };
     if(await findRecord()) {savePending(null);setMessage(`${record.action} and its HCS record are confirmed: ${record.transactionId}`);return;}
-    if(record.hcsTransactionId) throw new Error(`HCS transaction ${record.hcsTransactionId} was submitted; wait for mirror indexing or use the CLI reconciliation command. Do not submit it twice.`);
+    if(record.hcsTransactionId) {
+      // Reconcile the earlier HCS submission on the mirror before ever sending another.
+      const outcome=await checkWalletTransaction(record.hcsTransactionId,record.hcsSubmittedAt??0);
+      if(outcome==='success') throw new Error(`HCS transaction ${record.hcsTransactionId} succeeded; its topic message is not indexed yet. Click Check HCS record again shortly.`);
+      if(outcome==='unknown') throw new Error(`HCS transaction ${record.hcsTransactionId} is not on the mirror yet. Check again in a minute; it will not be submitted twice.`);
+      // It failed or expired without reaching Hedera, so a new submission cannot duplicate it.
+      record={action:record.action,transactionId:record.transactionId,message:record.message};
+      savePending(record);
+    }
     const [{Hbar,TopicMessageSubmitTransaction,TransactionId},{HederaJsonRpcMethod,transactionToBase64String}]=await Promise.all([import('@hiero-ledger/sdk'),import('@hashgraph/hedera-wallet-connect')]);
     const hcs=new TopicMessageSubmitTransaction().setTopicId(deployment.hcsTopic).setMessage(record.message);
     const hcsId=TransactionId.generate(deployment.guardianId);
@@ -114,19 +123,24 @@ export function GuardianWallet({deployment,onConfirmed}:{deployment:Deployment;o
     } catch(error) {
       const detail=JSON.stringify(error);
       if(/"_code"\s*:\s*4\b/.test(detail)) throw new Error('HCS approval expired before submission. Click Retry HCS record and approve the new HashPack request within three minutes.');
+      // A declined request was never signed, so it cannot reach Hedera.
+      if(walletRejected(error)) throw new Error(`The HCS record was declined in HashPack; nothing was submitted. The ${record.action} itself is confirmed. Click Retry HCS record to publish it.`);
       // A transport error may occur after submission. Record the ID so retry
       // checks the mirror instead of sending an identical event twice.
-      savePending({...record,hcsTransactionId});
-      throw new Error(`HCS submission could not be confirmed. Check transaction ${hcsTransactionId} on the mirror before retrying.`);
+      savePending({...record,hcsTransactionId,hcsSubmittedAt:Date.now()});
+      throw new Error(`HashPack did not confirm the HCS record. Click Check HCS record: transaction ${hcsTransactionId} is checked on the mirror before anything is resubmitted.`);
     }
-    savePending({...record,hcsTransactionId});
+    savePending({...record,hcsTransactionId,hcsSubmittedAt:Date.now()});
     let confirmed=false;
     for(let attempt=0;attempt<10;attempt++) {
       const response=await fetch(`https://testnet.mirrornode.hedera.com/api/v1/transactions/${mirrorId(hcsTransactionId)}`);
       if(response.ok) {
         const rows=(await response.json() as {transactions:{nonce:number;result:string}[]}).transactions;
         const parent=rows.find(row=>row.nonce===0);
-        if(parent) {if(parent.result!=='SUCCESS') throw new Error(`HCS transaction failed: ${parent.result}`);confirmed=true;break;}
+        if(parent) {
+          if(parent.result!=='SUCCESS') {savePending({action:record.action,transactionId:record.transactionId,message:record.message});throw new Error(`HCS transaction failed: ${parent.result}. Click Retry HCS record to publish it again.`);}
+          confirmed=true;break;
+        }
       }
       await new Promise(resolve=>setTimeout(resolve,1500));
     }
