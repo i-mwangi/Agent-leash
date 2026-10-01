@@ -375,7 +375,9 @@ The agent card's default standing endpoint is `localhost:3001`, which only this 
 npm run agent -- set-standing-url https://your-public-host
 ```
 
-It rewrites the card in the ERC-8004 registry from the setup account (about 0.9 HBAR) and saves the new base URL locally only after the registry update succeeds; restart `npm run dev` so the 402 challenge advertises it. Use an address that stays stable: the card keeps pointing at it after a tunnel closes. This command is covered by local tests; it has not yet been run against testnet.
+It rewrites the card in the ERC-8004 registry from the setup account (about 0.2 HBAR) and saves the new base URL locally only after the registry update succeeds; restart `npm run dev` so the 402 challenge advertises it. Use an address that stays stable: the card keeps pointing at it after a tunnel closes, so switch it back (`set-standing-url http://localhost:3001`) before closing a temporary tunnel.
+
+On 1 October 2026 agent `125`'s card was [pointed at a temporary ngrok address](https://hashscan.io/testnet/transaction/0.0.10798471%401790847836.941582342). A lookup of `125` then still verified and returned the public standing address, and an unpaid request through the tunnel returned a real `402 Payment Required` advertising that address. The card was then [switched back to localhost](https://hashscan.io/testnet/transaction/0.0.10798471%401790847905.023312762) and the tunnel closed. No report was purchased through the tunnel.
 
 ---
 
