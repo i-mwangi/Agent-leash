@@ -13,6 +13,7 @@ import { roleKey } from './runtime';
 import { feedbackInput, giveFeedback } from './feedback';
 import { resolveAgent } from '../../shared/src/resolve';
 import { payService, priceOf, type ServiceRequest } from './pay';
+import { addPaymentJob } from './payJobs';
 
 function deployment(){const d=readDeployment();if(!d?.agentAccount) throw new AppError('SETUP_REQUIRED');return d;}
 function answer(value:unknown){return {content:[{type:'text' as const,text:JSON.stringify(jsonSafe(value))}]};}
@@ -64,6 +65,9 @@ export function createAgentMcp() {
   });
   server.registerTool('pay_service',{description:'Pay an x402 service in USDC on Hedera testnet and return its response. Checks the guardian policy (pause, caps, allowed token) immediately before signing with the agent key, refuses a price above maxAmount, confirms the transfer on the mirror and records it on HCS. Give sellerAgentId to require that the seller is that verified ERC-8004 agent.',inputSchema:{...service,maxAmount:uint.describe('Highest price you accept, in USDC smallest units (6 decimals): 10000 = 0.01 USDC'),sellerAgentId:uint.optional()}},async args=>{
     try {return answer(await payService({...request(args),maxAmount:BigInt(args.maxAmount),sellerAgentId:args.sellerAgentId===undefined?undefined:BigInt(args.sellerAgentId)}));}catch(error){return toolError(error);}
+  });
+  server.registerTool('schedule_payment',{description:'Schedule an x402 payment (optionally repeating) that the local agent runtime makes when due, through the same policy check as pay_service at that moment. Runs only while the runtime (npm run dev) is running; a run more than 15 minutes late is skipped, never paid late.',inputSchema:{url:service.url,prompt:service.prompt,maxAmount:uint.describe('Highest price per run, USDC smallest units: 10000 = 0.01 USDC'),sellerAgentId:uint.optional(),runAt:z.string().describe('ISO 8601 time, at least 30 seconds and at most 30 days ahead'),everyMinutes:z.number().int().min(5).optional(),times:z.number().int().min(1).max(100).optional()}},async args=>{
+    try {return answer(addPaymentJob({url:args.url,maxAmount:args.maxAmount,runAt:args.runAt,...(args.prompt?{prompt:args.prompt}:{}),...(args.sellerAgentId?{sellerAgentId:args.sellerAgentId}:{}),...(args.everyMinutes?{everySeconds:args.everyMinutes*60}:{}),...(args.times?{times:args.times}:{})}));}catch(error){return toolError(error);}
   });
   server.registerTool('resolve_agent',{description:'Look up any agent by ERC-8004 ID and verify its card, HCS records, account key, policy and agreement before dealing with it. Includes its reviews. Read-only.',inputSchema:{agentId:uint}},async({agentId})=>{
     try {return answer(await resolveAgent(feedbackInput(agentId,'0').agentId));}catch(error){return toolError(error);}

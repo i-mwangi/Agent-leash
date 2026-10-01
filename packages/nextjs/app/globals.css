@@ -1144,3 +1144,11 @@ button.link {
   gap: 8px;
   font-size: 12px;
 }
+
+.pay-form .small-input {
+  width: 64px;
+  border: 1px solid #dce3d6;
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+}

@@ -7,6 +7,7 @@ import { advance, chooseGuardian, type Progress } from './wizard';
 import { spend } from './spend';
 import { cancelSchedule, listSchedules, reconcileSchedules, scheduleSwap } from './schedule';
 import { payService, priceOf, type ServiceRequest } from './pay';
+import { addPaymentJob, cancelPaymentJob, listPaymentJobs, runDuePaymentJobs } from './payJobs';
 import { clearInferenceSettings, readInferenceSettings, saveInferenceSettings, testInferenceSettings } from './inferenceSettings';
 
 /** Agent work the dashboard can request. Each one runs the same policy-checked code as the CLI. */
@@ -109,6 +110,14 @@ export function createSetupApp(run:()=>Promise<Progress>=()=>advance(),select:(i
     return c.json(agentState());
   });
   // LLM provider settings for the paid inference this agent sells. The key goes in, never out.
+  // Scheduled x402 payments: each one runs through payService when due, with the policy checked then.
+  app.get('/setup/agent/payment-jobs',c=>c.json(listPaymentJobs()));
+  app.post('/setup/agent/payment-jobs',async c=>c.json(addPaymentJob(await c.req.json().catch(()=>null))));
+  app.post('/setup/agent/payment-jobs/:id/cancel',c=>{
+    const id=Number(c.req.param('id'));
+    if(!Number.isSafeInteger(id) || id<1) throw new AppError('INVALID_REQUEST',400);
+    return c.json(cancelPaymentJob(id));
+  });
   app.get('/setup/inference',c=>c.json(readInferenceSettings()));
   app.post('/setup/inference',async c=>c.json(saveInferenceSettings(await c.req.json().catch(()=>null))));
   app.delete('/setup/inference',c=>c.json(clearInferenceSettings()));
@@ -130,5 +139,12 @@ if(process.argv[1]?.replace(/\\/g,'/').endsWith('/agent/src/service.ts')) {
       lastError=code;
     });
   },20_000).unref();
+  // Run due scheduled x402 payments, one check every 15 seconds.
+  let paying=false;
+  setInterval(()=>{
+    if(busy() || paying) return;
+    paying=true;
+    runDuePaymentJobs().catch(()=>console.error('Accountable Agent runtime: scheduled payments not checked')).finally(()=>{paying=false;});
+  },15_000).unref();
   console.log('Accountable Agent setup runtime: http://127.0.0.1:3002 (local only)');
 }

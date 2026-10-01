@@ -11,6 +11,19 @@ type Received = { transactionId: string; amount: string; payer: string | null; c
 type Payments = { token: Token; usdcAllowed: boolean; balance: string | null; policyContractId?: string; paid: Paid[]; received: Received[]; selling: { endpoint: string; provider: string; model: string; price: string } | null };
 type Price = { paymentRequired: false; status: number } | { paymentRequired: true; description: string | null; amount: string; payTo: string };
 type Task = { kind: string; running: boolean; result: unknown; error: string | null };
+type Job = { id: number; url: string; prompt: string | null; max_amount: string; seller_agent_id: string | null; next_run: number; every_seconds: number | null; remaining: number; runs: number; status: string; last_status: string | null; last_transaction: string | null; last_body: string | null; last_run: number | null };
+const UNIT_SECONDS = { minutes: 60, hours: 3600, days: 86400 } as const;
+/** Value for a datetime-local input, in the browser's time zone. */
+function localInput(date: Date) {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+/** A job's last answer, shown as the model's text when the body is an inference result. */
+function lastAnswer(body: string | null) {
+  if (!body) return null;
+  try { const parsed = JSON.parse(body) as { answer?: unknown }; return typeof parsed.answer === "string" ? parsed.answer : body.slice(0, 300); }
+  catch { return body.slice(0, 300); }
+}
 
 const SETUP_HEADERS = { "x-accountable-setup": "1", "Content-Type": "application/json" };
 const USDC = "0.0.429274";
@@ -76,6 +89,14 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
   const [task, setTask] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [allowMessage, setAllowMessage] = useState<string | null>(null);
+  const [timing, setTiming] = useState<"now" | "later">("now");
+  const [at, setAt] = useState(() => localInput(new Date(Date.now() + 5 * 60_000)));
+  const [repeat, setRepeat] = useState(false);
+  const [every, setEvery] = useState("1");
+  const [unit, setUnit] = useState<keyof typeof UNIT_SECONDS>("hours");
+  const [times, setTimes] = useState("3");
+  const [jobs, setJobs] = useState<Job[] | null>(null);
+  const [jobMessage, setJobMessage] = useState<string | null>(null);
 
   const load = useCallback(() => {
     fetch("/api/agent/payments", { cache: "no-store" })
@@ -84,6 +105,15 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
       .catch(reason => setLoadError(reason instanceof Error ? reason.message : "Payments unavailable"));
   }, []);
   useEffect(() => { load(); }, [load]);
+  const loadJobs = useCallback(() => { runtime<Job[]>("agent/payment-jobs").then(setJobs).catch(() => setJobs(null)); }, []);
+  useEffect(() => { loadJobs(); }, [loadJobs]);
+  // While a payment is scheduled, follow its runs and refresh the payment list after each.
+  const scheduledCount = jobs?.filter(j => j.status === "scheduled").length ?? 0;
+  useEffect(() => {
+    if (!scheduledCount) return;
+    const timer = setInterval(() => { loadJobs(); load(); }, 20_000);
+    return () => clearInterval(timer);
+  }, [scheduledCount, loadJobs, load]);
   useEffect(() => {
     if (!task?.running) return;
     const timer = setInterval(() => {
@@ -106,6 +136,23 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
     setError(null);
     try { setTask((await runtime<{ task: Task }>("agent/pay", request())).task); }
     catch (reason) { setError(explain(reason instanceof Error ? reason.message : "PAYMENT_FAILED")); }
+  }
+  async function schedule() {
+    setError(null); setJobMessage(null);
+    try {
+      const base = request();
+      const runAt = new Date(at);
+      if (Number.isNaN(runAt.getTime())) throw new Error("Pick a date and time");
+      const job = { url: base.url, maxAmount: base.maxAmount, runAt: runAt.toISOString(), ...(base.prompt ? { prompt: base.prompt } : {}), ...(base.sellerAgentId ? { sellerAgentId: base.sellerAgentId } : {}),
+        ...(repeat ? { everySeconds: Math.round(Number(every) * UNIT_SECONDS[unit]), times: Number(times) } : {}) };
+      const saved = await runtime<Job>("agent/payment-jobs", job);
+      setJobMessage(`Scheduled payment #${saved.id} for ${new Date(saved.next_run).toLocaleString()}${saved.every_seconds ? `, then ${saved.remaining - 1} more` : ""}. Keep npm run dev running.`);
+      loadJobs();
+    } catch (reason) { setError(explain(reason instanceof Error ? reason.message : "SCHEDULE_FAILED")); }
+  }
+  async function cancelJob(id: number) {
+    try { await runtime(`agent/payment-jobs/${id}/cancel`, {}); loadJobs(); }
+    catch (reason) { setError(explain(reason instanceof Error ? reason.message : "CANCEL_FAILED")); }
   }
   async function allowUsdc() {
     setAllowMessage("Approve the policy change, then the HCS record, in HashPack…");
@@ -152,10 +199,30 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
         <label className="check"><input type="checkbox" checked={sendPrompt} onChange={event => setSendPrompt(event.target.checked)} /> Send a prompt (POST {"{\"prompt\": …}"}, for inference endpoints such as /paid/inference). Leave off for GET services like /standing.</label>
         {sendPrompt && <label>Prompt<textarea value={prompt} onChange={event => setPrompt(event.target.value)} rows={3} maxLength={4000} /></label>}
         <label>Highest price you accept<div className="amount-field"><input value={max} onChange={event => setMax(event.target.value)} inputMode="decimal" /><span>USDC</span></div></label>
+        <div className="dex-mode" role="radiogroup" aria-label="When">
+          <label><input type="radio" checked={timing === "now"} onChange={() => setTiming("now")} /> Now</label>
+          <label><input type="radio" checked={timing === "later"} onChange={() => setTiming("later")} /> At</label>
+          {timing === "later" && <input type="datetime-local" value={at} onChange={event => setAt(event.target.value)} aria-label="Payment time" />}
+        </div>
+        {timing === "later" && (
+          <div className="dex-mode">
+            <label><input type="checkbox" checked={repeat} onChange={event => setRepeat(event.target.checked)} /> Repeat every</label>
+            {repeat && <>
+              <input className="small-input" value={every} onChange={event => setEvery(event.target.value)} inputMode="decimal" aria-label="Interval" />
+              <select className="select" value={unit} onChange={event => setUnit(event.target.value as keyof typeof UNIT_SECONDS)} aria-label="Interval unit"><option value="minutes">minutes</option><option value="hours">hours</option><option value="days">days</option></select>
+              <span>for</span>
+              <input className="small-input" value={times} onChange={event => setTimes(event.target.value)} inputMode="numeric" aria-label="Number of payments" />
+              <span>payments in total</span>
+            </>}
+          </div>
+        )}
         <div className="pay-actions">
           <button className="secondary" type="button" disabled={!url || !!task?.running} onClick={() => void checkPrice()}>Check price</button>
-          <button className="primary" type="button" disabled={!url || !!task?.running} onClick={() => void pay()}>{task?.running ? "Agent paying…" : "Pay and send"}</button>
+          {timing === "now"
+            ? <button className="primary" type="button" disabled={!url || !!task?.running} onClick={() => void pay()}>{task?.running ? "Agent paying…" : "Pay and send"}</button>
+            : <button className="primary" type="button" disabled={!url} onClick={() => void schedule()}>Schedule payment</button>}
         </div>
+        {timing === "later" && <small>The local agent runtime makes each payment when it is due, checking your policy at that moment. It runs only while npm run dev is running; a payment more than 15 minutes late is skipped, never made late. Minimum interval: 5 minutes; at most 100 payments.</small>}
       </div>
       {error && <div className="notice"><div>{error}</div></div>}
       {price && <div className="notice" role="status"><div>
@@ -173,6 +240,33 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
       )}
       {answer && <blockquote className="service-answer">{answer}</blockquote>}
       {result?.body !== undefined && result?.body !== null && !answer && <pre className="service-answer">{typeof result.body === "string" ? result.body : JSON.stringify(result.body, null, 2)}</pre>}
+
+      {jobMessage && <div className="notice" role="status"><div>{jobMessage}</div></div>}
+
+      <h3 className="dex-heading">Scheduled payments</h3>
+      {jobs === null && <p>Restart npm run dev to schedule payments: the local agent runtime runs them.</p>}
+      {jobs && jobs.length === 0 && <p>None yet.</p>}
+      {jobs && jobs.length > 0 && (
+        <table className="card-table">
+          <thead><tr><th>Next run</th><th>Payment</th></tr></thead>
+          <tbody>{jobs.map(job => (
+            <tr key={job.id}>
+              <th>{job.status === "scheduled" ? new Date(job.next_run).toLocaleString() : job.status}</th>
+              <td>
+                #{job.id} · up to {usdc(job.max_amount)} to {job.url}{job.seller_agent_id && ` (agent ${job.seller_agent_id})`}
+                <small>
+                  {job.every_seconds ? `Every ${job.every_seconds >= 86400 ? `${job.every_seconds / 86400} d` : job.every_seconds >= 3600 ? `${job.every_seconds / 3600} h` : `${job.every_seconds / 60} min`} · ` : ""}
+                  {job.runs} run{job.runs === 1 ? "" : "s"}, {job.status === "scheduled" ? `${job.remaining} left` : job.status}
+                  {job.last_status && <> · last: <strong>{job.last_status}</strong>{REASON_TEXT[job.last_status] && ` (${REASON_TEXT[job.last_status]})`}</>}
+                  {job.last_transaction && <> · <a href={hashscan("transaction", job.last_transaction)} target="_blank" rel="noreferrer">last payment</a></>}
+                  {job.status === "scheduled" && <> · <button className="link" type="button" onClick={() => void cancelJob(job.id)}>Cancel</button></>}
+                </small>
+                {lastAnswer(job.last_body) && <small>Last answer: {lastAnswer(job.last_body)}</small>}
+              </td>
+            </tr>
+          ))}</tbody>
+        </table>
+      )}
 
       <h3 className="dex-heading">Payments made</h3>
       {payments && payments.paid.length === 0 && <p>None yet.</p>}

@@ -38,5 +38,9 @@ export const REASON_TEXT:Record<string,string>={
   TOKEN_NOT_ASSOCIATED:'The agent account is not associated with this token, so it holds none.',
   INFERENCE_NOT_CONFIGURED:'The seller has not configured an LLM provider, so its endpoint charges nothing and answers 503.',
   INFERENCE_EMPTY_ANSWER:'The model returned no text, for example a reasoning model that ran out of output tokens. Nobody was charged.',
+  MISSED:'The agent runtime was not running when this payment was due, so it was skipped rather than made late.',
+  PAID:'Paid, confirmed on the mirror and recorded on HCS.',
+  INVALID_REPEAT:'A repeating payment needs both an interval and a number of payments.',
+  INVALID_PAYMENT_JOB:'Check the URL, price, time and repeat settings.',
   API_UNAVAILABLE:'The local API did not answer; check that npm run dev is running.',
 };
