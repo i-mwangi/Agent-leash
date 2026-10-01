@@ -7,6 +7,7 @@ import { advance, chooseGuardian, type Progress } from './wizard';
 import { spend } from './spend';
 import { cancelSchedule, listSchedules, reconcileSchedules, scheduleSwap } from './schedule';
 import { payService, priceOf, type ServiceRequest } from './pay';
+import { buySpendToken, fundingStatus, topUpHbar } from './funding';
 import { addPaymentJob, cancelPaymentJob, listPaymentJobs, runDuePaymentJobs } from './payJobs';
 import { clearInferenceSettings, readInferenceSettings, saveInferenceSettings, testInferenceSettings } from './inferenceSettings';
 
@@ -118,6 +119,11 @@ export function createSetupApp(run:()=>Promise<Progress>=()=>advance(),select:(i
     if(!Number.isSafeInteger(id) || id<1) throw new AppError('INVALID_REQUEST',400);
     return c.json(cancelPaymentJob(id));
   });
+  // Funding the agent after setup: balances, and top-ups paid by the setup account.
+  const tinybarsOf=(value:unknown)=>{const parsed=uint.safeParse(value);if(!parsed.success || BigInt(parsed.data)<=0n) throw new AppError('INVALID_AMOUNT',400);return BigInt(parsed.data);};
+  app.get('/setup/funding',async c=>c.json(await fundingStatus()));
+  app.post('/setup/funding/hbar',async c=>c.json(await topUpHbar(tinybarsOf((await c.req.json().catch(()=>null) as {tinybars?:unknown}|null)?.tinybars))));
+  app.post('/setup/funding/spend-token',async c=>c.json(await buySpendToken(tinybarsOf((await c.req.json().catch(()=>null) as {tinybars?:unknown}|null)?.tinybars))));
   app.get('/setup/inference',c=>c.json(readInferenceSettings()));
   app.post('/setup/inference',async c=>c.json(saveInferenceSettings(await c.req.json().catch(()=>null))));
   app.delete('/setup/inference',c=>c.json(clearInferenceSettings()));

@@ -9,7 +9,7 @@ import { Mirror, type MirrorKey } from '../../shared/src/mirror';
 import { checkDeploymentKeys, decodeMirrorKey, normalizedPublic } from '../../shared/src/keys';
 import { FALLBACK, readFacts } from '../../shared/src/sources';
 import { agreementHash, walletAgreementPayload } from '../../shared/src/agreement';
-import { register, setup } from './setup';
+import { policyTokens, register, setup } from './setup';
 import { currentTerms } from './agreement';
 import { roleEnv, roleKey } from './runtime';
 
@@ -29,7 +29,7 @@ export interface Progress {
   fundingTinybars:string;
   deployment?:Pick<Deployment,'agentAccount'|'guardianId'|'hcsTopic'|'policyContractId'|'policyAddress'|'erc8004AgentId'|'uaid'|'spendAsset'>;
   topic?:{memo:string;adminKey:string;submitKeys:string[];threshold:number};
-  allow?:{policyContractId:string;spendAsset:string};
+  allow?:{policyContractId:string;spendAsset:string;tokens:string[]};
   agreement?:{message:string;hash:string;terms:Record<string,unknown>};
 }
 
@@ -131,7 +131,7 @@ export async function advance(mirror=new Mirror()):Promise<Progress> {
   }
   const configured=await setup();
   d=readDeployment()!;
-  if(configured.waitingFor==='allow') return {...common,stage:'allow',deployment:publicView(d),allow:{policyContractId:d.policyContractId!,spendAsset:d.spendAsset}};
+  if(configured.waitingFor==='allow') return {...common,stage:'allow',deployment:publicView(d),allow:{policyContractId:d.policyContractId!,spendAsset:d.spendAsset,tokens:policyTokens(d.spendAsset)}};
   await register();
   d=readDeployment()!;
   const {agreement,approved}=await currentTerms();

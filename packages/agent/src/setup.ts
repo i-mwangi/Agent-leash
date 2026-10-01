@@ -54,6 +54,8 @@ export async function publish(d:Deployment,type:ProfileEvent['type'],payload:Rec
   const client=clientFor(payer,roleKey(role));
   try{return await nativeOperation(name,new TopicMessageSubmitTransaction().setTopicId(d.hcsTopic).setMessage(content),client,store);}finally{client.close();}
 }
+/** Tokens setup allows: the swap asset, and USDC so the agent can pay x402 services without a separate step. */
+export const policyTokens=(spendAsset:string)=>[...new Set([spendAsset,USDC])];
 /** A guardian-wallet step the browser must complete before setup can continue. */
 export type WalletStep='topic'|'allow';
 export async function setup():Promise<Deployment&{waitingFor?:WalletStep}> {
@@ -96,7 +98,7 @@ export async function setup():Promise<Deployment&{waitingFor?:WalletStep}> {
     }
     if(!wallet) {
       const guardianClient=clientFor(d.guardianId,roleKey('guardian'));
-      try { await nativeOperation('policy-allow-usdc',new ContractExecuteTransaction().setContractId(d.policyContractId!).setGas(300000).setFunctionParameters(getBytes(POLICY_ABI.encodeFunctionData('setAllowedTokens',[[d.spendAsset],true]))),guardianClient,store); }finally{guardianClient.close();}
+      try { await nativeOperation('policy-allow-usdc',new ContractExecuteTransaction().setContractId(d.policyContractId!).setGas(300000).setFunctionParameters(getBytes(POLICY_ABI.encodeFunctionData('setAllowedTokens',[policyTokens(d.spendAsset),true]))),guardianClient,store); }finally{guardianClient.close();}
     }
     await publish(d,'policy',{address:d.policyAddress},'operator','hcs-policy',store);
     const agentClient=clientFor(d.agentAccount,roleKey('agent'));

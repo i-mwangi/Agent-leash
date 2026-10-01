@@ -63,3 +63,19 @@ describe('running scheduled x402 payments',()=>{
     expect(await runDuePaymentJobs(async()=>({paid:true}),open(),()=>NOW+10*3_600_000)).toEqual([]);
   });
 });
+
+describe('funding the agent after setup',()=>{
+  it('keeps top-ups in range and leaves the setup account its 2 HBAR reserve',async()=>{
+    const { checkTopUp, MAX_HBAR_TOP_UP, MAX_SAUCE_BUY_TINYBARS } = await import('../packages/agent/src/funding');
+    expect(()=>checkTopUp(300_000_000n,1_476_000_000n,MAX_HBAR_TOP_UP)).not.toThrow();
+    expect(()=>checkTopUp(0n,1_476_000_000n,MAX_HBAR_TOP_UP)).toThrow('FUND_AMOUNT_OUT_OF_RANGE');
+    expect(()=>checkTopUp(2_100_000_000n,9_000_000_000n,MAX_HBAR_TOP_UP)).toThrow('FUND_AMOUNT_OUT_OF_RANGE');
+    expect(()=>checkTopUp(200_000_000n,MAX_SAUCE_BUY_TINYBARS*3n,MAX_SAUCE_BUY_TINYBARS)).toThrow('FUND_AMOUNT_OUT_OF_RANGE');
+    expect(()=>checkTopUp(300_000_000n,450_000_000n,MAX_HBAR_TOP_UP)).toThrow('SETUP_ACCOUNT_HBAR_LOW');
+  });
+  it('allows the swap token and USDC in one setup transaction',async()=>{
+    const { policyTokens } = await import('../packages/agent/src/setup');
+    expect(policyTokens('0.0.1183558')).toEqual(['0.0.1183558','0.0.429274']);
+    expect(policyTokens('0.0.429274')).toEqual(['0.0.429274']);
+  });
+});

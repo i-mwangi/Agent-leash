@@ -97,7 +97,7 @@ After `npm run dev`, open **Create agent** and click **Connect HashPack**. The p
 | Create the 1-of-2 agent account                 | Agent runtime       |
 | Create the HCS profile topic (guardian admin)   | HashPack approval   |
 | Publish the UAID and deploy the policy contract | Agent runtime       |
-| Allow the spend asset in the policy             | HashPack approval   |
+| Allow the spend asset and USDC in the policy    | HashPack approval   |
 | Associate tokens and register ERC-8004          | Agent runtime       |
 | Review and approve the agreement                | HashPack approval   |
 
@@ -110,6 +110,16 @@ When setup finishes, the API verifies the deployment (identity, HCS records, pol
 - **Resumable.** Progress is re-read from the mirror: the setup account is found by its public key, and the topic by its exact guardian admin key and 1-of-3 submit key list. Runtime writes use the same operation store as the CLI, so a reload or crash never repeats a confirmed transaction. A wallet request with an unknown outcome stays pending until the mirror shows it succeeded, failed or expired.
 - **Agreement approval.** The guardian's wallet publishes the exact terms, their hash and `approval: "guardian-hcs-transaction"` to the agent's topic. The guardian key signs that HCS transaction, and verifiers accept the record only when the mirror shows the guardian account as its payer. The page recomputes the terms hash before asking for approval. It is a technical policy record, not a legal agreement.
 - **WalletConnect.** The template ships a public WalletConnect project ID so HashPack connects from a fresh scaffold. To use your own, set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` in `packages/nextjs/.env.local`.
+
+**Fund your agent.** Setup leaves the agent with 5 HBAR and no tokens. The **Fund your agent** panel at the end of **Create agent** shows what it holds for each feature and tops it up:
+
+| Agent holds | Used for                                          | How to top up                                                                                                                                          |
+| ----------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| HBAR        | Network fees for swaps, schedules and HCS records | **Send from setup account** (up to 20 HBAR at a time; the setup account keeps a 2 HBAR reserve)                                                        |
+| SAUCE       | Swaps on the Optional DEX page                    | **Buy SAUCE on SaucerSwap** with up to 1 HBAR of setup-account funds at a time                                                                         |
+| USDC        | Paying x402 services                              | [Circle's testnet faucet](https://faucet.circle.com/) (Hedera Testnet), sent straight to the agent's account, which setup already associates with USDC |
+
+Setup's allow step also allows USDC in the policy, so a new agent can pay services without a separate guardian step; deployments created earlier use **Allow USDC payments** on the Pay services page. Low balances on the DEX and Pay services pages link to this panel. The same top-ups from the CLI are `fund-agent`, `fund-dex` and, from an operator that holds USDC, `fund-usdc`.
 
 **Verification status:** on 30 September 2026 the complete flow ran on Hedera testnet from a fresh public scaffold with all four steps **approved in HashPack** ([evidence](#browser-setup)): agent `0.0.10798474`, ERC-8004 agent `125`. The API then verified the deployment and wallet-approved agreement, switched to testnet on its own and returned a 402 standing challenge. An earlier run of the same flow, with a script-held guardian key, also produced a verified version 2 standing report.
 

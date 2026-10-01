@@ -75,7 +75,7 @@ async function allowUsdcWithWallet(guardianId: string, policyContractId: string,
   } finally { client.close(); }
 }
 
-export function PayPanel({ deployment }: { deployment: { agentAccount?: string; guardianId?: string; guardianMode?: "local" | "wallet"; hcsTopic?: string; policyAddress?: string } }) {
+export function PayPanel({ deployment, onFund }: { onFund?: () => void; deployment: { agentAccount?: string; guardianId?: string; guardianMode?: "local" | "wallet"; hcsTopic?: string; policyAddress?: string } }) {
   const [payments, setPayments] = useState<Payments | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [url, setUrl] = useState("");
@@ -185,7 +185,7 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
       {payments && (
         <p>
           Agent balance: <strong>{payments.balance === null ? "USDC not associated" : usdc(payments.balance)}</strong> ·
-          USDC payments are <strong>{payments.usdcAllowed ? "allowed" : "not allowed yet"}</strong> by the policy.
+          USDC payments are <strong>{payments.usdcAllowed ? "allowed" : "not allowed yet"}</strong> by the policy.{onFund && (!payments.balance || BigInt(payments.balance) < 10000n) && <> <button className="link" type="button" onClick={onFund}>Get testnet USDC</button></>}
         </p>
       )}
       {payments && !payments.usdcAllowed && (

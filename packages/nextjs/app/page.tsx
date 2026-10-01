@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { createLiveReader, tokenAmount, type Snapshot, type SpendToken } from './live-data';
 import { GuardianWallet } from './guardian-wallet';
 import { SetupWizard } from './setup-wizard';
+import { FundingPanel } from './funding-panel';
 import { OverviewSummary } from './overview';
 import { StandingPanel } from './standing-panel';
 import { AgentCard } from './agent-card';
@@ -39,6 +40,8 @@ const units=(value:string)=>BigInt(value).toLocaleString('en-US');
 function usagePercent(s:Snapshot){const cap=BigInt(s.maxPerDay);return cap===0n?0:Number((BigInt(s.spentToday)*100n)/cap);}
 export default function Home() {
   const [tab, setTab] = useState<Tab>("Overview");
+  // Low balances elsewhere link to the funding panel at the end of Create agent.
+  const openFunding = () => { setTab("Create agent"); setTimeout(() => document.getElementById("fund-agent")?.scrollIntoView({ behavior: "smooth" }), 100); };
   const [paused, setPaused] = useState(false);
   const [active, setActive] = useState(true);
   const [amount, setAmount] = useState("250000");
@@ -481,6 +484,12 @@ export default function Home() {
               <SetupWizard/>
             </section>
           )}
+          {tab === "Create agent" && live?.mode === "testnet" && live.deployment?.agentAccount && (
+            <section className="panel detail" id="fund-agent">
+              <h2>Fund your agent</h2>
+              <FundingPanel />
+            </section>
+          )}
           {live?.mode==='testnet' && live.deployment && <section className="panel detail compact" style={{display:tab==='Policy'?undefined:'none'}}><h2>Guardian actions in HashPack</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void reader.current?.refresh();}}/></section>}
           {tab === "Identity" && (() => {
             const d = live?.deployment;
@@ -548,12 +557,12 @@ export default function Home() {
             <h2>Pay for services with x402</h2>
             <p>After setup, the agent can pay HTTP services that charge per request over x402, in USDC on Hedera testnet and within its policy, and can sell paid LLM inference itself.</p>
           </section>}
-          {tab === 'Pay services' && live?.mode==='testnet' && live.deployment && <PayPanel deployment={live.deployment} />}
+          {tab === 'Pay services' && live?.mode==='testnet' && live.deployment && <PayPanel deployment={live.deployment} onFund={openFunding} />}
           {tab === 'Optional DEX' && !testnet && <section className="panel detail">
             <h2>Optional SaucerSwap testnet route</h2>
             <p>After setup, this page reads a live SAUCE → WHBAR quote from SaucerSwap on Hedera testnet. The agent's own swaps are checked against its policy before it signs.</p>
           </section>}
-          {tab === 'Optional DEX' && live?.mode==='testnet' && <DexPanel hcsTopic={live.deployment?.hcsTopic} agentAccount={live.deployment?.agentAccount} guardianId={live.deployment?.guardianId} />}
+          {tab === 'Optional DEX' && live?.mode==='testnet' && <DexPanel hcsTopic={live.deployment?.hcsTopic} agentAccount={live.deployment?.agentAccount} guardianId={live.deployment?.guardianId} onFund={openFunding} />}
           {tab === "Overview" && <section className="roadmap">
             <div className="panel-title">
               <h2>From scaffold to accountable agent</h2>

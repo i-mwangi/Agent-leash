@@ -42,5 +42,7 @@ export const REASON_TEXT:Record<string,string>={
   PAID:'Paid, confirmed on the mirror and recorded on HCS.',
   INVALID_REPEAT:'A repeating payment needs both an interval and a number of payments.',
   INVALID_PAYMENT_JOB:'Check the URL, price, time and repeat settings.',
+  SETUP_ACCOUNT_HBAR_LOW:'The setup account would drop below its 2 HBAR reserve. Send it HBAR from HashPack, or send a smaller amount.',
+  FUND_AMOUNT_OUT_OF_RANGE:'Send at most 20 HBAR at a time, or spend at most 1 HBAR on the swap token.',
   API_UNAVAILABLE:'The local API did not answer; check that npm run dev is running.',
 };

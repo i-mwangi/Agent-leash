@@ -1152,3 +1152,30 @@ button.link {
   padding: 8px;
   font: inherit;
 }
+
+.funding-action {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  margin: 8px 0 4px;
+}
+.funding-action .amount-field {
+  width: 160px;
+  margin: 0;
+  padding: 8px 10px;
+}
+.card-table em.warn {
+  font-style: normal;
+  font-size: 11px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #fbebe4;
+  color: #8a3b1d;
+}
+.faucet-steps {
+  margin: 6px 0;
+  padding-left: 18px;
+  font-size: 13px;
+}

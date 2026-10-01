@@ -15,7 +15,7 @@ const STEPS:{label:string;wallet:boolean;stage:Progress['stage']|null;kind?:stri
   {label:'Create the 1-of-2 agent account',wallet:false,stage:null},
   {label:'Create the HCS profile topic',wallet:true,stage:'topic'},
   {label:'Publish identity and deploy the policy contract',wallet:false,stage:null},
-  {label:'Allow the spend asset in the policy',wallet:true,stage:'allow'},
+  {label:'Allow the spend asset and USDC in the policy',wallet:true,stage:'allow'},
   {label:'Register the ERC-8004 identity',wallet:false,stage:null},
   {label:'Review and approve the agreement',wallet:true,stage:'agreement'},
 ];
@@ -132,7 +132,7 @@ export function SetupWizard() {
       tx=new TopicCreateTransaction().setTopicMemo(t.memo).setAdminKey(PublicKey.fromStringECDSA(t.adminKey)).setSubmitKey(new KeyList(t.submitKeys.map(k=>PublicKey.fromStringECDSA(k)),t.threshold));
     } else if(stage==='allow'){
       const a=progress.allow;if(!a)throw new Error('Policy details are not ready');
-      tx=new ContractExecuteTransaction().setContractId(a.policyContractId).setGas(300000).setFunctionParameters(getBytes(new Interface(['function setAllowedTokens(string[],bool)']).encodeFunctionData('setAllowedTokens',[[a.spendAsset],true])));
+      tx=new ContractExecuteTransaction().setContractId(a.policyContractId).setGas(300000).setFunctionParameters(getBytes(new Interface(['function setAllowedTokens(string[],bool)']).encodeFunctionData('setAllowedTokens',[a.tokens??[a.spendAsset],true])));
     } else {
       const g=progress.agreement,topic=progress.deployment?.hcsTopic;if(!g||!topic)throw new Error('Agreement details are not ready');
       verifyAgreementMessage(g,progress);
@@ -193,7 +193,7 @@ export function SetupWizard() {
         ?<button className="secondary" disabled={busy||!PROJECT_ID} onClick={()=>void perform(connect)}>{account?`Use ${account} as guardian`:'Connect HashPack'}</button>
         :<button className="secondary" disabled={busy||!!account||!PROJECT_ID} onClick={()=>void perform(connect)}>{account?`Guardian ${account}`:'Connect HashPack'}</button>)}
       {account&&stage!=='done'&&<button className="secondary" disabled={busy} onClick={()=>void perform(disconnect)}>Disconnect</button>}
-      {walletStage&&<button className="primary" disabled={busy||!account||!!pending||state.running} onClick={()=>void perform(()=>approve(walletStage))}>{{fund:'Fund setup account',topic:'Create HCS topic',allow:'Allow spend asset',agreement:'Approve agreement'}[walletStage]} in HashPack</button>}
+      {walletStage&&<button className="primary" disabled={busy||!account||!!pending||state.running} onClick={()=>void perform(()=>approve(walletStage))}>{{fund:'Fund setup account',topic:'Create HCS topic',allow:'Allow SAUCE and USDC',agreement:'Approve agreement'}[walletStage]} in HashPack</button>}
     </div>
     {message&&<p role="status">{message}</p>}
     <p className="boundary-note">The policy's caps and pause are enforced by the supplied agent client, not by the account key. Setup uses about 30 HBAR in fees and account balances. Testnet only.</p>

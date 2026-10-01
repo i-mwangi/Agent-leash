@@ -16,7 +16,7 @@ Accountable Agent gives an AI agent on Hedera testnet a 1-of-2 account it shares
 
 | Where | What lives there |
 | --- | --- |
-| `packages/agent/src/` | CLI (`cli.ts`), setup shared by CLI and browser (`setup.ts`), local runtime for browser setup and dashboard agent tasks (`service.ts`, `wizard.ts`), pre-signing policy check (`policyClient.ts`), spend, scheduled swaps (`schedule.ts`), x402 payments (`pay.ts`) and their schedules (`payJobs.ts`), LLM provider settings (`inferenceSettings.ts`), vault, feedback, MCP (`mcp.ts`) |
+| `packages/agent/src/` | CLI (`cli.ts`), setup shared by CLI and browser (`setup.ts`), local runtime for browser setup and dashboard agent tasks (`service.ts`, `wizard.ts`), pre-signing policy check (`policyClient.ts`), spend, scheduled swaps (`schedule.ts`), x402 payments (`pay.ts`) and their schedules (`payJobs.ts`), post-setup funding (`funding.ts`), LLM provider settings (`inferenceSettings.ts`), vault, feedback, MCP (`mcp.ts`) |
 | `packages/server/src/` | Hono API: modes (`index.ts`), routes (`app.ts`), live sources (`live.ts`), x402 settlement (`x402.ts`), paid LLM inference route |
 | `packages/shared/src/` | Mirror client, `readFacts` identity verification (`sources.ts`), agent lookup and reputation (`resolve.ts`), read-only mainnet venue prices (`venues.ts`), AI SDK inference providers (`inference.ts`), agreement and standing formats, UAID, vault terms |
 | `packages/contracts/contracts/` | `PolicyRegistry.sol` (client-enforced policy) and `GuardedHbarVault.sol` (contract-enforced HBAR) with Solidity tests |

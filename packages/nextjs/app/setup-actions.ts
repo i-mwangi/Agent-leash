@@ -10,7 +10,7 @@ export interface Progress {
   fundingTinybars:string;
   deployment?:{agentAccount?:string;guardianId?:string;hcsTopic?:string;policyContractId?:string;policyAddress?:string;erc8004AgentId?:string;uaid?:string;spendAsset?:string};
   topic?:{memo:string;adminKey:string;submitKeys:string[];threshold:number};
-  allow?:{policyContractId:string;spendAsset:string};
+  allow?:{policyContractId:string;spendAsset:string;tokens?:string[]};
   agreement?:{message:string;hash:string;terms:Record<string,unknown>};
 }
 export interface SetupState {running:boolean;step:string;lastError:string|null;progress:Progress|null}

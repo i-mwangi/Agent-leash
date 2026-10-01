@@ -99,7 +99,7 @@ function VenueComparison() {
 }
 
 /** Ask the agent to swap now or at a set time, and follow what it scheduled. */
-function DirectAgent({ token, agentAccount, guardianId, onChanged }: { token: Token | null; agentAccount?: string; guardianId?: string; onChanged: () => void }) {
+function DirectAgent({ token, agentAccount, guardianId, onChanged, onFund }: { token: Token | null; agentAccount?: string; guardianId?: string; onChanged: () => void; onFund?: () => void }) {
   const [hbar, setHbar] = useState<bigint | null>(null);
   const [state, setState] = useState<AgentState | null>(null);
   const [offline, setOffline] = useState<false | "down" | "outdated">(false);
@@ -190,7 +190,7 @@ function DirectAgent({ token, agentAccount, guardianId, onChanged }: { token: To
       {hbar !== null && (
         <p className={hbar < LOW_HBAR ? "notice" : undefined}>
           <span>Agent HBAR for network fees: <strong>{tokenAmount(hbar.toString(), 8)} HBAR</strong>.
-            {hbar < LOW_HBAR && <> That is too little to pay for a swap; a scheduled swap would fail at execution with INSUFFICIENT_PAYER_BALANCE. Send HBAR to {agentAccount} from HashPack, or run <code className="command">npm run agent -- fund-agent 300000000</code> to send 3 HBAR from the setup account.</>}
+            {hbar < LOW_HBAR && <> That is too little to pay for a swap; a scheduled swap would fail at execution with INSUFFICIENT_PAYER_BALANCE. {onFund ? <button className="link" type="button" onClick={onFund}>Fund the agent</button> : <>Run <code className="command">npm run agent -- fund-agent 300000000</code></>} to send it HBAR from the setup account, or send HBAR to {agentAccount} from HashPack.</>}
             {hbar >= LOW_HBAR && <> A swap costs about 0.1 HBAR; scheduling one costs about 1.1 HBAR more.</>}</span>
         </p>
       )}
@@ -252,7 +252,7 @@ function DirectAgent({ token, agentAccount, guardianId, onChanged }: { token: To
 }
 
 /** The agent on Hedera's exchanges: price discovery across venues, swaps on demand or on a schedule, and its record. */
-export function DexPanel({ hcsTopic, agentAccount, guardianId }: { hcsTopic?: string; agentAccount?: string; guardianId?: string }) {
+export function DexPanel({ hcsTopic, agentAccount, guardianId, onFund }: { hcsTopic?: string; agentAccount?: string; guardianId?: string; onFund?: () => void }) {
   const [fills, setFills] = useState<Fills | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -281,12 +281,12 @@ export function DexPanel({ hcsTopic, agentAccount, guardianId }: { hcsTopic?: st
       </p>
 
       <VenueComparison />
-      <DirectAgent token={fills?.spendToken ?? null} agentAccount={agentAccount} guardianId={guardianId} onChanged={loadFills} />
+      <DirectAgent token={fills?.spendToken ?? null} agentAccount={agentAccount} guardianId={guardianId} onChanged={loadFills} onFund={onFund} />
 
       <h3 className="dex-heading">Swap record on HCS</h3>
       {error && <div className="notice"><div>{error}</div></div>}
       {!fills && !error && <p>Reading the agent&apos;s HCS records…</p>}
-      {fills && fills.fills.length === 0 && <p>No swaps recorded yet. Fund the agent with {fills.spendToken.symbol}, then ask it to swap.</p>}
+      {fills && fills.fills.length === 0 && <p>No swaps recorded yet. {onFund ? <button className="link" type="button" onClick={onFund}>Fund the agent</button> : "Fund the agent"} with {fills.spendToken.symbol}, then ask it to swap.</p>}
       {fills && fills.fills.length > 0 && (
         <table className="card-table">
           <thead><tr><th>When</th><th>Swap</th></tr></thead>
