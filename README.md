@@ -422,6 +422,7 @@ Run as `npm run agent -- <command>`.
 | `.env.guardian`                        | Local guardian key, created only by CLI setup                                                                                                  |
 | `.accountable/`                        | Deployment record, drafts, operation stores and evidence log                                                                                   |
 | `APP_MODE`                             | API mode: `auto` (default: demo until the deployment verifies), `testnet` (strict: fail before serving) or `demo`                              |
+| `PORT`                                 | API port (default 3001), for running a second agent's API on the same computer                                                                 |
 | `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional override in `packages/nextjs/.env.local`                                                                                              |
 
 All role files and `.accountable/` are ignored by git; keep them out of GitHub. To run the API alone in strict testnet mode: PowerShell `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`, Bash `APP_MODE=testnet npm run dev -w @accountable/server`. Strict mode verifies the account, HCS, registry, policy, facilitator support and payment token association, and fails before serving if a source is unavailable.

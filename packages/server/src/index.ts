@@ -39,5 +39,8 @@ if (requested === "auto") {
   void attempt();
   setInterval(() => void attempt(), 15_000).unref();
 }
-serve({ fetch: createApp(() => mode, () => live).fetch, port: 3001, hostname: "127.0.0.1" });
-console.log(`Accountable Agent API: http://127.0.0.1:3001 (${mode}${requested === 'auto' ? ', auto: verifying any deployment in the background' : ''})`);
+// PORT lets a second agent's API run on the same computer, for example to sell to the first one.
+const port = Number(process.env.PORT ?? 3001);
+if (!Number.isInteger(port) || port < 1024 || port > 65535) throw new Error("PORT must be an integer from 1024 to 65535");
+serve({ fetch: createApp(() => mode, () => live).fetch, port, hostname: "127.0.0.1" });
+console.log(`Accountable Agent API: http://127.0.0.1:${port} (${mode}${requested === 'auto' ? ', auto: verifying any deployment in the background' : ''})`);
