@@ -81,7 +81,7 @@ export async function testInferenceSettings(root=ROOT,run:typeof complete=comple
     return {ok:true as const,provider,model:config.model,answer:result.answer.slice(0,300),usage:result.usage};
   } catch(error) {
     // Shown only to the seller in the local dashboard, so the provider's reason is useful here.
-    if(!(error instanceof AppError) || !error.code.startsWith('INFERENCE_UPSTREAM')) throw error;
+    if(!(error instanceof AppError) || !/^INFERENCE_(UPSTREAM|EMPTY)/.test(error.code)) throw error;
     return {ok:false as const,provider,model:config.model,error:error.code,providerMessage:(error as AppError&{providerMessage?:string|null}).providerMessage??null};
   }
 }

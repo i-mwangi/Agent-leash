@@ -37,5 +37,6 @@ export const REASON_TEXT:Record<string,string>={
   SERVICE_UNREACHABLE:'The service did not answer.',
   TOKEN_NOT_ASSOCIATED:'The agent account is not associated with this token, so it holds none.',
   INFERENCE_NOT_CONFIGURED:'The seller has not configured an LLM provider, so its endpoint charges nothing and answers 503.',
+  INFERENCE_EMPTY_ANSWER:'The model returned no text, for example a reasoning model that ran out of output tokens. Nobody was charged.',
   API_UNAVAILABLE:'The local API did not answer; check that npm run dev is running.',
 };

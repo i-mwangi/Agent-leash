@@ -30,11 +30,13 @@ describe('paid inference configuration',()=>{
   });
   it('reports only the status of a provider error, never its message',async()=>{
     const config={provider:'gateway' as const,apiKey:'vck_12345678',model:'moonshotai/kimi-k3',price:'10000'};
-    expect(await complete(config,'Hi',async options=>{expect(options.prompt).toBe('Hi');expect(options.maxOutputTokens).toBe(512);return {text:'Hello',usage:{inputTokens:3,outputTokens:1}};}))
+    expect(await complete(config,'Hi',async options=>{expect(options.prompt).toBe('Hi');expect(options.maxOutputTokens).toBe(2048);return {text:'Hello',usage:{inputTokens:3,outputTokens:1}};}))
       .toEqual({provider:'gateway',model:'moonshotai/kimi-k3',answer:'Hello',usage:{inputTokens:3,outputTokens:1}});
     const failing=async()=>{throw new APICallError({message:'invalid key vck_12345678',url:'https://x',requestBodyValues:{},statusCode:401});};
     await expect(complete(config,'Hi',failing)).rejects.toThrow(/^INFERENCE_UPSTREAM_401$/);
     await expect(complete(config,'Hi',async()=>{throw new Error('socket');})).rejects.toThrow(/^INFERENCE_UPSTREAM_UNAVAILABLE$/);
+    // A reasoning model that runs out of tokens returns no text; that fails before settlement.
+    await expect(complete(config,'Hi',async()=>({text:'  '}))).rejects.toThrow(/^INFERENCE_EMPTY_ANSWER$/);
   });
 });
 

@@ -1138,3 +1138,9 @@ button.link {
   color: #8a9384;
   font-size: 11px;
 }
+.pay-form label.check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 12px;
+}

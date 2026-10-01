@@ -22,7 +22,8 @@ export const providerSchema=z.enum(Object.keys(PROVIDERS) as [Provider,...Provid
 export interface InferenceConfig { provider:Provider; apiKey:string; model:string; baseUrl?:string; price:string }
 export const DEFAULT_INFERENCE_PRICE='10000'; // six decimals: 0.01 USDC
 export const MAX_PROMPT_CHARS=4000;
-const MAX_OUTPUT_TOKENS=512;
+// Reasoning models spend part of this on thinking; 512 left ling-3.0-flash-sante with no answer.
+const MAX_OUTPUT_TOKENS=2048;
 
 export const apiKeySchema=z.string().regex(/^[\x21-\x7e]{8,512}$/,'API key must be 8-512 printable characters without spaces');
 export const modelSchema=z.string().regex(/^[\w.:/@-]{1,100}$/);
@@ -83,6 +84,7 @@ export async function complete(config:InferenceConfig,prompt:string,generate:Gen
     const code=failure.status?`INFERENCE_UPSTREAM_${failure.status}`:'INFERENCE_UPSTREAM_UNAVAILABLE';
     throw detail?Object.assign(new AppError(code),{providerMessage:failure.message}):new AppError(code);
   }
-  if(!result.text) throw new AppError('INFERENCE_UPSTREAM_INVALID');
+  // An empty answer (for example a reasoning model out of tokens) fails before settlement, so it is not charged.
+  if(!result.text.trim()) throw new AppError('INFERENCE_EMPTY_ANSWER');
   return {provider:config.provider,model:config.model,answer:result.text,usage:{inputTokens:result.usage?.inputTokens??null,outputTokens:result.usage?.outputTokens??null}};
 }

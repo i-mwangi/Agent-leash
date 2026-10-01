@@ -68,6 +68,9 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
   const [url, setUrl] = useState("");
   const [seller, setSeller] = useState("");
   const [prompt, setPrompt] = useState("In two sentences, what is the Hedera Consensus Service?");
+  // A prompt turns the request into a POST; only inference endpoints take one, so default to sending it there.
+  const [sendPrompt, setSendPrompt] = useState(false);
+  useEffect(() => { setSendPrompt(/\/paid\/inference\/?$/.test(url.trim())); }, [url]);
   const [max, setMax] = useState("0.05");
   const [price, setPrice] = useState<Price | null>(null);
   const [task, setTask] = useState<Task | null>(null);
@@ -92,7 +95,7 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
   const request = () => {
     const maxAmount = toUnits(max, 6);
     if (!maxAmount) throw new Error("Enter the highest price you accept in USDC, e.g. 0.05");
-    return { url: url.trim(), prompt: prompt.trim() || undefined, maxAmount: maxAmount.toString(), sellerAgentId: seller.trim() || undefined };
+    return { url: url.trim(), prompt: sendPrompt ? prompt.trim() || undefined : undefined, maxAmount: maxAmount.toString(), sellerAgentId: seller.trim() || undefined };
   };
   async function checkPrice() {
     setError(null); setPrice(null);
@@ -146,7 +149,8 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
       <div className="pay-form">
         <label>Service URL<div className="amount-field"><input value={url} onChange={event => setUrl(event.target.value)} placeholder="https://… or http://127.0.0.1:3001/paid/inference" /></div></label>
         <label>Seller&apos;s ERC-8004 agent ID (optional; the agent refuses unless it verifies)<div className="amount-field"><input value={seller} onChange={event => setSeller(event.target.value)} inputMode="numeric" placeholder="e.g. 125" /></div></label>
-        <label>Prompt (sent as {"{\"prompt\": …}"} for an inference endpoint)<textarea value={prompt} onChange={event => setPrompt(event.target.value)} rows={3} maxLength={4000} /></label>
+        <label className="check"><input type="checkbox" checked={sendPrompt} onChange={event => setSendPrompt(event.target.checked)} /> Send a prompt (POST {"{\"prompt\": …}"}, for inference endpoints such as /paid/inference). Leave off for GET services like /standing.</label>
+        {sendPrompt && <label>Prompt<textarea value={prompt} onChange={event => setPrompt(event.target.value)} rows={3} maxLength={4000} /></label>}
         <label>Highest price you accept<div className="amount-field"><input value={max} onChange={event => setMax(event.target.value)} inputMode="decimal" /><span>USDC</span></div></label>
         <div className="pay-actions">
           <button className="secondary" type="button" disabled={!url || !!task?.running} onClick={() => void checkPrice()}>Check price</button>
