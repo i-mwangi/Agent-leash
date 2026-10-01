@@ -5,6 +5,7 @@ import { IDENTITY_ABI } from '../packages/shared/src/sources';
 import { REPUTATION_ABI, formatFixed, parseCardUri, readReputation, resolveAgent } from '../packages/shared/src/resolve';
 import { feedbackInput } from '../packages/agent/src/feedback';
 import { standingBase } from '../packages/agent/src/setup';
+import { recentFills } from '../packages/shared/src/fills';
 import { createApp } from '../packages/server/src/app';
 
 const dataUri=(card:object)=>'data:application/json;base64,'+Buffer.from(JSON.stringify(card)).toString('base64');
@@ -82,6 +83,24 @@ describe('feedback input',()=>{
     expect(feedbackInput('125','90','identity-check')).toEqual({agentId:125n,score:90n,tag:'identity-check'});
     expect(feedbackInput('1','0').tag).toBe('interaction');
     for(const [id,score,tag] of [['0','50'],['12a','50'],['5','101'],['5','-1'],['5','9.5'],['5','50','Bad Tag']]) expect(()=>feedbackInput(id,score,tag)).toThrow();
+  });
+});
+
+describe('recent swaps',()=>{
+  it('lists only the agent\'s own fill records, newest first, with the received amount read from the mirror',async()=>{
+    const d={agentAccount:'0.0.10',spendAsset:'0.0.20',outputAsset:'0.0.30'};
+    const event=(sequence:number,publisher:string,payload:Record<string,unknown>)=>({v:1 as const,type:'fill' as const,ts:'2026-10-01T00:00:00.000Z',agentAccount:'0.0.10',payload,consensusTimestamp:`17908${sequence}.000000001`,sequence,publisher});
+    const mirror={
+      token:async(id:string)=>({token_id:id,symbol:id==='0.0.20'?'SAUCE':'WHBAR',decimals:id==='0.0.20'?'6':'8',deleted:false}),
+      contractTransfers:async()=>({parent:{},transfers:[{account:'0.0.10',token_id:'0.0.30',amount:905763},{account:'0.0.10',token_id:'0.0.20',amount:-500000}]}),
+    } as unknown as Mirror;
+    const result=await recentFills(d,[
+      event(5,'0.0.10',{status:'success',transactionId:'0.0.10@1.000000001',amount:'500000'}),
+      event(6,'0.0.99',{status:'success',transactionId:'0.0.99@1.000000001',amount:'1'}),
+      event(7,'0.0.10',{status:'failed',transactionId:'0.0.10@2.000000001',amount:'250000',reason:'INSUFFICIENT_GAS'}),
+    ],mirror);
+    expect(result.spendToken).toEqual({id:'0.0.20',symbol:'SAUCE',decimals:6});
+    expect(result.fills.map(f=>[f.sequence,f.status,f.received,f.reason])).toEqual([[7,'failed',null,'INSUFFICIENT_GAS'],[5,'success','905763',null]]);
   });
 });
 

@@ -497,6 +497,8 @@ On 1 October 2026 the CLI agent (ERC-8004 `121`, account `0.0.10715883`) looked 
 
 The V1 router `0.0.19264` exists on testnet, but there is no USDC → WHBAR pool, so new scaffolds use the SAUCE → WHBAR V1 pool. On 25 September 2026 [the operator bought 54.935622 SAUCE for the agent with 1 HBAR](https://hashscan.io/testnet/transaction/0.0.5792828%401790369426.644109430), [the policy-checked agent swapped 1 SAUCE for 0.01809430 WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790369523.124021573) and [published the fill](https://hashscan.io/testnet/transaction/0.0.10715883%401790369529.955985574). Hedera reports the HTS transfers on the contract call's child nonces; the adapter checks those rows and the router parent before accepting a fill.
 
+The browser-set-up agent `125` made the same kind of swap on 1 October 2026. Its setup account [bought 54.872058 SAUCE for the agent](https://hashscan.io/testnet/transaction/0.0.10798471%401790808878.898287168) with `fund-dex`; the agent then checked its policy and [swapped 0.5 SAUCE for 0.00905763 WHBAR](https://hashscan.io/testnet/transaction/0.0.10798474%401790849202.494431270), confirmed the token movements on the mirror and recorded the fill as HCS message 7 on topic `0.0.10798482`. The policy's daily usage then read 0.5 of 5 SAUCE, and the dashboard's Optional DEX page lists the swap with the received amount read from the mirror.
+
 A forked-mainnet execution has **not** been demonstrated: a Hardhat 3 fork of `https://mainnet.hashio.io/api` loaded the mainnet router bytecode, but calls failed because the fork lacked Hedera's hardfork history, and the Hedera forking plugin declares a Hardhat 2 peer dependency.
 
 ### Local validation

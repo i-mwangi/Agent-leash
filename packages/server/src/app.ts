@@ -5,6 +5,8 @@ import { AppError, uint, jsonSafe } from '../../shared/src/model';
 import { readDeployment } from '../../shared/src/files';
 import { fallbackQuote, quote, policySnapshot } from '../../shared/src/sources';
 import { resolveAgent } from '../../shared/src/resolve';
+import { recentFills } from '../../shared/src/fills';
+import type { ConsensusEvent } from '../../shared/src/model';
 import { Mirror } from '../../shared/src/mirror';
 
 export const demoPolicy: PolicySnapshot = {
@@ -114,6 +116,11 @@ export function createApp(modeInput:string|(()=>string) = "demo", services:()=>L
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
     const parsed=uint.safeParse(c.req.query('amount')); if(!parsed.success) throw new AppError('INVALID_AMOUNT',400);
     return c.json(await fallbackQuote(live.deployment,live.mirror,BigInt(parsed.data)));
+  });
+  app.get('/agent/fills',async c=>{
+    const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
+    const facts=await live.ready(live.deployment.agentAccount??'') as {events:ConsensusEvent[]};
+    return c.json(jsonSafe(await recentFills(live.deployment,facts.events,live.mirror)));
   });
   // Public, read-only lookup of any agent; works before setup because it needs only the mirror.
   app.get('/agents/:agentId',async c=>{

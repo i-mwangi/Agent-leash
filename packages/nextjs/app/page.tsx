@@ -7,6 +7,7 @@ import { OverviewSummary } from './overview';
 import { StandingPanel } from './standing-panel';
 import { AgentCard } from './agent-card';
 import { AgentLookup, OwnReputation } from './agent-lookup';
+import { DexPanel } from './dex-panel';
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -58,7 +59,6 @@ export default function Home() {
   );
   const [busy, setBusy] = useState(false);
   const [live,setLive]=useState<LiveView|null>(null);
-  const [fallback,setFallback]=useState<string|null>(null);
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
   const [token,setToken]=useState<SpendToken|null>(null);
   const [liveError,setLiveError]=useState<string|null>(null);
@@ -96,10 +96,6 @@ export default function Home() {
     })();
     return ()=>{mounted=false;if(timer)clearInterval(timer);reads.dispose();};
   },[]);
-  async function readFallback(){
-    setFallback('Checking testnet pool…');
-    try{const response=await fetch('/api/dex/fallback-quote?amount=1000000');const data=await response.json();setFallback(response.ok?`Read-only quote: 1 SAUCE → ${Number(data.amountOut)/100000000} WHBAR. No transaction submitted.`:`Quote unavailable: ${data.error??response.status}`);}catch{setFallback('Quote unavailable: API offline');}
-  }
   const testnet=live?.mode==='testnet';
   const policyAsset=testnet?live?.deployment?.spendAsset??'unavailable':'0.0.429274';
   // Live amounts in the token's own units once its mirror-reported decimals are known.
@@ -553,12 +549,7 @@ export default function Home() {
             <h2>Optional SaucerSwap testnet route</h2>
             <p>After setup, this page reads a live SAUCE → WHBAR quote from SaucerSwap on Hedera testnet. The agent's own swaps are checked against its policy before it signs.</p>
           </section>}
-          {tab === 'Optional DEX' && live?.mode==='testnet' && <section className="panel detail">
-            <h2>Optional SaucerSwap testnet route</h2>
-            <p>Inspect the live SAUCE → WHBAR V1 pool. The agent signs a swap through the isolated CLI after checking its policy; this quote button only reads the pool.</p>
-            <button className="secondary" onClick={readFallback}>Read pool quote</button>
-            {fallback && <p role="status">{fallback}</p>}
-          </section>}
+          {tab === 'Optional DEX' && live?.mode==='testnet' && <DexPanel hcsTopic={live.deployment?.hcsTopic} />}
           {tab === "Overview" && <section className="roadmap">
             <div className="panel-title">
               <h2>From scaffold to accountable agent</h2>

@@ -1008,3 +1008,19 @@ details.technical[open] summary {
     grid-template-columns: 1fr;
   }
 }
+.dex-heading {
+  font-size: 14px;
+  margin: 22px 0 6px;
+}
+code.command {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: #f1f3ec;
+}
+.card-table thead th {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #8a9384;
+}
