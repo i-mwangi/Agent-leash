@@ -5,6 +5,7 @@ import { GuardianWallet } from './guardian-wallet';
 import { SetupWizard } from './setup-wizard';
 import { OverviewSummary } from './overview';
 import { StandingPanel } from './standing-panel';
+import { AgentCard } from './agent-card';
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -523,6 +524,7 @@ export default function Home() {
                         <small>The card as read back from the registry and checked against this deployment.</small>
                       </li>
                     </ul>
+                    <AgentCard agentId={d.erc8004AgentId!} registry={d.registry} />
                   </>
                 ) : (
                   <>
@@ -542,7 +544,7 @@ export default function Home() {
             );
           })()}
           {tab === "Standing" && (
-            <StandingPanel testnet={testnet} agentAccount={live?.deployment?.agentAccount} agreementVersion={live?.agreement?.version} />
+            <StandingPanel testnet={testnet} agentAccount={live?.deployment?.agentAccount} agreementVersion={live?.agreement?.version} onShowCard={() => setTab("Identity")} />
           )}
           {tab === 'Optional DEX' && !testnet && <section className="panel detail">
             <h2>Optional SaucerSwap testnet route</h2>

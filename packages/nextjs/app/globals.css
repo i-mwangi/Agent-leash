@@ -946,3 +946,38 @@ details.technical[open] summary {
   display: grid;
   gap: 3px;
 }
+
+.agent-card-view {
+  margin-top: 26px;
+  padding-top: 20px;
+  border-top: 1px solid #eff1eb;
+}
+.agent-card-view h3 {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+.card-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 13px;
+}
+.card-table th {
+  width: 160px;
+  text-align: left;
+  vertical-align: top;
+  font-weight: 600;
+  padding: 9px 12px 9px 0;
+  color: #1d2a1f;
+  border-bottom: 1px solid #eff1eb;
+}
+.card-table td {
+  padding: 9px 0;
+  border-bottom: 1px solid #eff1eb;
+  overflow-wrap: anywhere;
+}
+.card-table td small {
+  display: block;
+  color: #8a9384;
+  font-size: 12px;
+}

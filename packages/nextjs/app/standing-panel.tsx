@@ -6,7 +6,7 @@ type Challenge = { status: number; price?: string; payTo?: string; feePayer?: st
 const MIRROR = "https://testnet.mirrornode.hedera.com/api/v1";
 
 /** Explains paid standing and shows this agent's real x402 challenge without paying. */
-export function StandingPanel({ testnet, agentAccount, agreementVersion }: { testnet: boolean; agentAccount?: string; agreementVersion?: number }) {
+export function StandingPanel({ testnet, agentAccount, agreementVersion, onShowCard }: { testnet: boolean; agentAccount?: string; agreementVersion?: number; onShowCard: () => void }) {
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [busy, setBusy] = useState(false);
   const endpoint = agentAccount ? `http://localhost:3001/standing/${agentAccount}` : "http://localhost:3001/standing/<agent account>";
@@ -38,7 +38,13 @@ export function StandingPanel({ testnet, agentAccount, agreementVersion }: { tes
         mirror, the same request returns the signed report.
       </p>
       <div className="identity-list standing-facts">
-        <div><strong>Endpoint</strong> <code>GET {endpoint}</code></div>
+        <div>
+          <strong>Endpoint</strong> <code>GET {endpoint}</code>
+          <small>
+            Other agents learn this address from your agent card in the ERC-8004 registry.{" "}
+            <button className="text-link" onClick={onShowCard}>See the agent card</button>
+          </small>
+        </div>
         <div>
           <strong>What the report contains</strong>
           <small>
