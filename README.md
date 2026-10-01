@@ -499,7 +499,7 @@ A forked-mainnet execution has **not** been demonstrated: a Hardhat 3 fork of `h
 
 ### Local validation
 
-On 30 September 2026 the public template at `565bd8c` was scaffolded with the full command and passed `npm run check` (55 TypeScript tests, five Solidity execution tests, lint, type checking, builds); an earlier fresh copy passed the demo smoke check. These local checks are separate from the testnet receipts above.
+On 1 October 2026 the published template at `90d7127` was scaffolded with the bounty's exact command, `npm create scaffold-hbar@latest -- --template i-mwangi/Agent-leash`, accepting every default (`HBAR_ACCEPT_DEFAULTS=1`, which also installs Hedera Skills). The scaffolder selected Next.js, Hardhat and npm from `template.json`. In that fresh copy, `npm run check` passed (75 TypeScript tests, five Solidity execution tests, lint, type checking, production builds); the `npm run dev` bootstrap generated the three local key files; the built dashboard returned 200; and in demo mode `/health`, `/status` and `/deployment` returned 200 while `/standing/:id` returned the deliberate unpaid 503. The API routes were exercised in-process because another dev server held the default ports. Earlier, on 30 September, the template at `565bd8c` also passed with the full command. These local checks are separate from the testnet receipts above.
 
 ---
 
