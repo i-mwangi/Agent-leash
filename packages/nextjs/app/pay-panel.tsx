@@ -89,6 +89,7 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
   const [task, setTask] = useState<Task | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [allowMessage, setAllowMessage] = useState<string | null>(null);
+  const [allowing, setAllowing] = useState(false);
   const [timing, setTiming] = useState<"now" | "later">("now");
   const [at, setAt] = useState(() => localInput(new Date(Date.now() + 5 * 60_000)));
   const [repeat, setRepeat] = useState(false);
@@ -155,6 +156,9 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
     catch (reason) { setError(explain(reason instanceof Error ? reason.message : "CANCEL_FAILED")); }
   }
   async function allowUsdc() {
+    // One request at a time: a second click while HashPack is open would send a second allow.
+    if (allowing) return;
+    setAllowing(true);
     setAllowMessage("Approve the policy change, then the HCS record, in HashPack…");
     try {
       const { guardianId, hcsTopic, agentAccount, policyAddress } = deployment;
@@ -162,6 +166,7 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
       const id = await allowUsdcWithWallet(guardianId, payments.policyContractId, hcsTopic, agentAccount, policyAddress);
       setAllowMessage(`USDC allowed: ${id}`); load();
     } catch (reason) { setAllowMessage(`Not allowed: ${reason instanceof Error ? reason.message : "unknown error"}`); }
+    finally { setAllowing(false); }
   }
 
   const result = task && !task.running && !task.error && task.kind === "pay" ? task.result as { paid: boolean; transactionId?: string; amount?: string; status?: number | null; body?: unknown } : null;
@@ -187,7 +192,7 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
         <div className="notice"><div>
           The guardian must allow USDC ({USDC}) before the agent may pay with it.{" "}
           {deployment.guardianMode === "wallet"
-            ? <><button className="secondary" type="button" onClick={() => void allowUsdc()}>Allow USDC payments (HashPack)</button>{allowMessage && <span> {allowMessage}</span>}</>
+            ? <><button className="secondary" type="button" disabled={allowing} onClick={() => void allowUsdc()}>{allowing ? "Waiting for HashPack…" : "Allow USDC payments (HashPack)"}</button>{allowMessage && <span> {allowMessage}</span>}</>
             : <>Run <code className="command">npm run agent -- allow-token {USDC}</code> with the guardian key.</>}
         </div></div>
       )}
