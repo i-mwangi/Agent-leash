@@ -12,6 +12,7 @@
   "include": [
     "packages/agent/src/**/*.ts",
     "packages/server/src/**/*.ts",
-    "tests/**/*.ts"
+    "tests/**/*.ts",
+    "examples/**/*.ts"
   ]
 }

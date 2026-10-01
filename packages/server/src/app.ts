@@ -7,7 +7,7 @@ import { POLICY_ABI, fallbackQuote, quote, policySnapshot } from '../../shared/s
 import { recentRegistrations, resolveAgent } from '../../shared/src/resolve';
 import { recentFills, recentIncome, recentPayments } from '../../shared/src/fills';
 import { compareVenues } from '../../shared/src/venues';
-import { complete, inferenceRequest } from './inference';
+import { PROVIDERS, complete, inferenceRequest } from '../../shared/src/inference';
 import type { ConsensusEvent } from '../../shared/src/model';
 import { Mirror } from '../../shared/src/mirror';
 
@@ -123,9 +123,10 @@ export function createApp(modeInput:string|(()=>string) = "demo", services:()=>L
   app.get('/agent/payments',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
     const facts=await live.ready(live.deployment.agentAccount??'') as {events:ConsensusEvent[]};
+    const selling=live.inference?.()??null;
     const [token,allowed,balance]=await Promise.all([live.mirror.token(USDC),live.mirror.call(live.deployment.policyAddress!,POLICY_ABI,'allowedTokens',[USDC]),live.mirror.balance(live.deployment.agentAccount!,USDC).catch(()=>null)]);
     return c.json({token:{id:token.token_id,symbol:token.symbol,decimals:Number(token.decimals)},usdcAllowed:allowed[0]===true,balance:balance?.toString()??null,policyContractId:live.deployment.policyContractId,paid:recentPayments(live.deployment,facts.events),received:await recentIncome(live.deployment.agentAccount!,live.mirror),
-      selling:live.inference?{endpoint:`${live.deployment.standingBaseUrl}/paid/inference`,model:live.inference.model,price:live.inference.price}:null});
+      selling:selling?{endpoint:`${live.deployment.standingBaseUrl}/paid/inference`,provider:PROVIDERS[selling.provider].label,model:selling.model,price:selling.price}:null});
   });
   // Public mainnet market data from SaucerSwap and Lambdaplex; read-only and independent of setup.
   app.get('/dex/venues',async c=>{
@@ -151,12 +152,12 @@ export function createApp(modeInput:string|(()=>string) = "demo", services:()=>L
   });
   // Paid LLM inference sold by this agent over x402. Unconfigured, it stays an unpaid 503.
   app.get('/paid/inference',c=>{
-    const live=services(),config=live?.inference;
+    const live=services(),config=live?.inference?.();
     if(!live || !config) throw new AppError('INFERENCE_NOT_CONFIGURED');
-    return c.json({service:'LLM completion',method:'POST',body:{prompt:'string'},model:config.model,price:config.price,asset:USDC,network:'hedera:testnet',payTo:live.deployment.agentAccount,erc8004AgentId:live.deployment.erc8004AgentId});
+    return c.json({service:'LLM completion',method:'POST',body:{prompt:'string'},provider:PROVIDERS[config.provider].label,model:config.model,price:config.price,asset:USDC,network:'hedera:testnet',payTo:live.deployment.agentAccount,erc8004AgentId:live.deployment.erc8004AgentId});
   });
   app.post('/paid/inference',async c=>{
-    const live=services(),config=live?.inference;
+    const live=services(),config=live?.inference?.();
     if(!live || !config) throw new AppError('INFERENCE_NOT_CONFIGURED');
     const parsed=inferenceRequest.safeParse(await c.req.json().catch(()=>null));
     if(!parsed.success) throw new AppError('INVALID_PROMPT',400);

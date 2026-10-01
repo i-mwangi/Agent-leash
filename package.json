@@ -11,6 +11,7 @@
   },
   "scripts": {
     "agent": "tsx packages/agent/src/cli.ts",
+    "example:ai-gateway": "tsx examples/ai-gateway/index.ts",
     "format": "prettier --write README.md",
     "predev": "tsx packages/agent/src/bootstrap.ts",
     "dev": "concurrently -k -n api,web,agent \"npm run dev -w @accountable/server\" \"npm run dev -w @accountable/web\" \"tsx packages/agent/src/service.ts\"",
@@ -33,12 +34,16 @@
     "vitest": "^5.0.1"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^4.0.71",
+    "@ai-sdk/google": "^4.0.87",
+    "@ai-sdk/openai": "^4.0.83",
     "@hiero-ledger/proto": "2.31.0",
     "@hiero-ledger/sdk": "^2.88.0",
     "@modelcontextprotocol/sdk": "^1.30.1",
     "@x402/core": "^2.27.0",
     "@x402/fetch": "^2.27.0",
     "@x402/hedera": "^2.27.0",
+    "ai": "^7.0.126",
     "dotenv": "^18.0.3",
     "ethers": "^6.17.0",
     "zod": "^3.25.76"

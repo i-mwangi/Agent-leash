@@ -16,9 +16,9 @@ Accountable Agent gives an AI agent on Hedera testnet a 1-of-2 account it shares
 
 | Where | What lives there |
 | --- | --- |
-| `packages/agent/src/` | CLI (`cli.ts`), setup shared by CLI and browser (`setup.ts`), local runtime for browser setup and dashboard agent tasks (`service.ts`, `wizard.ts`), pre-signing policy check (`policyClient.ts`), spend, scheduled swaps (`schedule.ts`), x402 payments (`pay.ts`), vault, feedback, MCP (`mcp.ts`) |
-| `packages/server/src/` | Hono API: modes (`index.ts`), routes (`app.ts`), live sources (`live.ts`), x402 settlement (`x402.ts`), paid LLM inference (`inference.ts`) |
-| `packages/shared/src/` | Mirror client, `readFacts` identity verification (`sources.ts`), agent lookup and reputation (`resolve.ts`), read-only mainnet venue prices (`venues.ts`), agreement and standing formats, UAID, vault terms |
+| `packages/agent/src/` | CLI (`cli.ts`), setup shared by CLI and browser (`setup.ts`), local runtime for browser setup and dashboard agent tasks (`service.ts`, `wizard.ts`), pre-signing policy check (`policyClient.ts`), spend, scheduled swaps (`schedule.ts`), x402 payments (`pay.ts`), LLM provider settings (`inferenceSettings.ts`), vault, feedback, MCP (`mcp.ts`) |
+| `packages/server/src/` | Hono API: modes (`index.ts`), routes (`app.ts`), live sources (`live.ts`), x402 settlement (`x402.ts`), paid LLM inference route |
+| `packages/shared/src/` | Mirror client, `readFacts` identity verification (`sources.ts`), agent lookup and reputation (`resolve.ts`), read-only mainnet venue prices (`venues.ts`), AI SDK inference providers (`inference.ts`), agreement and standing formats, UAID, vault terms |
 | `packages/contracts/contracts/` | `PolicyRegistry.sol` (client-enforced policy) and `GuardedHbarVault.sol` (contract-enforced HBAR) with Solidity tests |
 | `packages/nextjs/app/` | Dashboard; `setup-wizard.tsx` (browser setup), `guardian-wallet.tsx` (HashPack actions), `agent-lookup.tsx` |
 | `tests/` | Deterministic tests; `agent-lookup.test.ts` shows how to fake the mirror |
@@ -31,6 +31,7 @@ Accountable Agent gives an AI agent on Hedera testnet a 1-of-2 account it shares
 | Setup/operator key (`.env.operator`) | Agent runtime and CLI | API, browser |
 | Guardian key | HashPack (browser setup) or `.env.guardian` (CLI setup) | API, dashboard code |
 | Attestation key (`.env.server`) | API, to sign standing reports | Anything else |
+| LLM provider key (`.env.server`, optional) | Written by the agent runtime from the dashboard form; read by the API to sell inference | Browser storage, HCS, logs, API responses |
 
 The API refuses to start with spend keys in its environment. The agent runtime listens on loopback only and rejects requests without its setup header or from another web origin; that includes the dashboard's swap and schedule requests, which run the same policy-checked code as the CLI.
 
@@ -39,7 +40,7 @@ The API refuses to start with spend keys in its environment. The agent runtime l
 - **Setup steps**: `setup.ts` serves both the CLI and browser setup; `wizard.ts` decides which wallet step the browser shows next. Every on-chain write goes through `nativeOperation`, which records the transaction before sending so a retry never duplicates it. Keep that.
 - **Spending rules**: `policyClient.ts` is a pure function with its own tests. The agent must run it against fresh mirror reads immediately before signing.
 - **Scheduled swaps**: `schedule.ts` checks the policy before signing the `ScheduleCreate`; Hedera does not check it at execution. Keep the reservation until the outcome is recorded, the guardian as an admin key, the runtime's cancel-on-refusal check, and reads with `scheduled=true` for the executed transaction (its child transfers come from the unfiltered rows).
-- **x402 payments**: `pay.ts` must check the policy for USDC immediately before signing, inspect the signed transfer, reserve before sending, and let the mirror decide whether money moved. Sellers use `Payments` in `x402.ts`; paid work that can fail runs with `prepareFirst` so a buyer is never charged for it. Never return a mock 402, and never log or return the inference provider key or its error bodies.
+- **x402 payments**: `pay.ts` must check the policy for USDC immediately before signing, inspect the signed transfer, reserve before sending, and let the mirror decide whether money moved. Sellers use `Payments` in `x402.ts`; paid work that can fail runs with `prepareFirst` so a buyer is never charged for it. Never return a mock 402, and never log or return the inference provider key or its error bodies. The key is entered in the dashboard and stored only through the agent runtime's `/setup/inference` route into `.env.server`; never add a route that reads it back.
 - **Venue prices**: `venues.ts` is read-only mainnet data. Never sign or submit on mainnet, and report a venue that fails rather than estimating it.
 - **Standing report fields**: `packages/shared/src/standing.ts`. Add a new signed version rather than changing an existing one; the version 1–3 tests are pinned.
 - **Verifying agents**: change `readFacts` in `sources.ts`; it backs standing, the dashboard and `resolveAgent`, so all of them stay consistent.

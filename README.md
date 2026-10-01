@@ -261,16 +261,20 @@ npm run agent -- pay https://seller.example/paid/inference --prompt "Hello" --ma
 - **No extra HBAR.** Blocky402 is the fee payer for Hedera x402 payments, so the agent needs USDC but no HBAR for them. `fund-usdc 1000000` sends 1 testnet USDC from the operator; the agent must be associated with USDC, which setup does.
 - **Where to find services.** Few public x402 services accept Hedera yet. Most listings in Coinbase's x402 directory use Base or Solana. This template's own endpoints (standing and paid inference) give other agents something to buy now.
 
-**Sell paid LLM inference.** Add an OpenAI-compatible provider to `.env.server` and restart `npm run dev`:
+**Sell paid LLM inference.** On the **Pay services** page, under **LLM provider**, choose a provider, paste its API key, pick a model and a price, then **Save provider** and **Test**. Inference runs through the [AI SDK](https://ai-sdk.dev):
 
-```sh
-INFERENCE_BASE_URL=https://api.openai.com/v1
-INFERENCE_API_KEY=your-provider-key
-INFERENCE_MODEL=gpt-4o-mini
-INFERENCE_PRICE=10000
-```
+| Provider          | Key                                                                               | Example model                                                                 |
+| ----------------- | --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Vercel AI Gateway | AI Gateway API key from the Vercel dashboard                                      | `moonshotai/kimi-k3`, `anthropic/claude-haiku-4.5`, `google/gemini-2.5-flash` |
+| OpenAI            | platform.openai.com                                                               | `gpt-4o-mini`                                                                 |
+| Anthropic         | console.anthropic.com                                                             | `claude-haiku-4-5`                                                            |
+| Google Gemini     | Google AI Studio                                                                  | `gemini-2.5-flash`                                                            |
+| OpenAI-compatible | Any `/chat/completions` provider, with its base URL (Groq, OpenRouter and others) | the provider's model name                                                     |
 
-`POST /paid/inference` with `{"prompt": "..."}` then charges `INFERENCE_PRICE` USDC (default 10000 = 0.01 USDC) to the agent's account. Other providers work the same way, for example Anthropic (`https://api.anthropic.com/v1`), Groq (`https://api.groq.com/openai/v1`) or OpenRouter (`https://openrouter.ai/api/v1`). The model runs only after the buyer's payment signature is verified, and the payment is settled only after the model answers, so a failed request is never charged. The provider key stays in `.env.server` and is never logged or returned; provider error bodies are not passed on. Without the three variables the endpoint answers an unpaid 503. The **Pay services** page shows the endpoint and the USDC the agent received.
+- **Where the key goes.** The browser sends the key once to the local agent runtime (loopback only, behind its setup header and origin check). The runtime writes it to `.env.server`, which git ignores, and never returns, logs or displays it again. A saved key is kept only for the same provider; switching providers needs that provider's key. **Remove** deletes the settings. The API re-reads `.env.server` on each request, so changes apply without a restart.
+- **Same settings without the browser:** `INFERENCE_PROVIDER` (`gateway`, `openai`, `anthropic`, `google` or `openai-compatible`), `INFERENCE_API_KEY`, `INFERENCE_MODEL`, `INFERENCE_PRICE` (USDC smallest units, default 10000 = 0.01 USDC) and, for `openai-compatible` only, `INFERENCE_BASE_URL`.
+- **Charging.** `POST /paid/inference` with `{"prompt": "..."}` charges the price in USDC to the agent's account. The model runs only after the buyer's payment signature is verified, and the payment is settled only after the model answers, so a failed request is never charged. Answers are capped at 512 output tokens. Provider error bodies are not passed on, only their HTTP status. Without a provider the endpoint answers an unpaid 503. The page shows the endpoint and the USDC received.
+- **AI Gateway example.** `npm run example:ai-gateway` asks `moonshotai/kimi-k3` through the Vercel AI Gateway to invent a holiday. It reads `AI_GATEWAY_API_KEY` from `.env.local` (git-ignored), or a Gateway key saved on the Pay services page.
 
 ### Optional HBAR vault
 
@@ -409,15 +413,16 @@ Run as `npm run agent -- <command>`.
 
 ## Configuration
 
-| File or variable                       | Purpose                                                                                                               |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `.env.operator`                        | Setup/operator key (generated by `npm run dev`); `HEDERA_OPERATOR_ID` is added once the account exists                |
-| `.env.agent`                           | Agent key, used only by the agent runtime and CLI                                                                     |
-| `.env.server`                          | Attestation key that signs standing reports, and optional `INFERENCE_*` provider settings; the API refuses spend keys |
-| `.env.guardian`                        | Local guardian key, created only by CLI setup                                                                         |
-| `.accountable/`                        | Deployment record, drafts, operation stores and evidence log                                                          |
-| `APP_MODE`                             | API mode: `auto` (default: demo until the deployment verifies), `testnet` (strict: fail before serving) or `demo`     |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional override in `packages/nextjs/.env.local`                                                                     |
+| File or variable                       | Purpose                                                                                                                                        |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `.env.operator`                        | Setup/operator key (generated by `npm run dev`); `HEDERA_OPERATOR_ID` is added once the account exists                                         |
+| `.env.agent`                           | Agent key, used only by the agent runtime and CLI                                                                                              |
+| `.env.server`                          | Attestation key that signs standing reports, and optional `INFERENCE_*` provider settings saved from the dashboard; the API refuses spend keys |
+| `.env.local`                           | Optional `AI_GATEWAY_API_KEY` for `npm run example:ai-gateway`                                                                                 |
+| `.env.guardian`                        | Local guardian key, created only by CLI setup                                                                                                  |
+| `.accountable/`                        | Deployment record, drafts, operation stores and evidence log                                                                                   |
+| `APP_MODE`                             | API mode: `auto` (default: demo until the deployment verifies), `testnet` (strict: fail before serving) or `demo`                              |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional override in `packages/nextjs/.env.local`                                                                                              |
 
 All role files and `.accountable/` are ignored by git; keep them out of GitHub. To run the API alone in strict testnet mode: PowerShell `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`, Bash `APP_MODE=testnet npm run dev -w @accountable/server`. Strict mode verifies the account, HCS, registry, policy, facilitator support and payment token association, and fails before serving if a source is unavailable.
 

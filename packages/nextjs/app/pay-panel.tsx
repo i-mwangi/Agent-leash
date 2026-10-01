@@ -1,13 +1,14 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import { toUnits, tokenAmount } from "./live-data";
+import { InferenceSettings } from "./inference-settings";
 import { REASON_TEXT } from "./reasons";
 import { restoredAccounts, signerFor } from "./wallet-session";
 
 type Token = { id: string; symbol: string; decimals: number };
 type Paid = { transactionId: string; amount: string; payTo: string; resource: string; recordedAt: string; sequence: number };
 type Received = { transactionId: string; amount: string; payer: string | null; consensusTimestamp: string };
-type Payments = { token: Token; usdcAllowed: boolean; balance: string | null; policyContractId?: string; paid: Paid[]; received: Received[]; selling: { endpoint: string; model: string; price: string } | null };
+type Payments = { token: Token; usdcAllowed: boolean; balance: string | null; policyContractId?: string; paid: Paid[]; received: Received[]; selling: { endpoint: string; provider: string; model: string; price: string } | null };
 type Price = { paymentRequired: false; status: number } | { paymentRequired: true; description: string | null; amount: string; payTo: string };
 type Task = { kind: string; running: boolean; result: unknown; error: string | null };
 
@@ -187,7 +188,7 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
       {payments?.selling ? (
         <>
           <p>
-            This agent sells one {payments.selling.model} completion for <strong>{usdc(payments.selling.price)}</strong> at{" "}
+            This agent sells one {payments.selling.model} completion ({payments.selling.provider}) for <strong>{usdc(payments.selling.price)}</strong> at{" "}
             <code>{payments.selling.endpoint}</code> (POST {"{\"prompt\": …}"}). The model only runs after the buyer&apos;s
             payment signature checks out, and the buyer is charged only if it answers.
           </p>
@@ -202,12 +203,12 @@ export function PayPanel({ deployment }: { deployment: { agentAccount?: string; 
         </>
       ) : (
         <p>
-          Not configured. Add <code>INFERENCE_BASE_URL</code>, <code>INFERENCE_API_KEY</code> and <code>INFERENCE_MODEL</code>{" "}
-          (optional <code>INFERENCE_PRICE</code>, default 10000 = 0.01 USDC) to <code>.env.server</code> and restart{" "}
-          <code>npm run dev</code>. Any OpenAI-compatible provider works; the README lists examples. Until then the endpoint
-          answers 503 and charges nothing.
+          Not selling yet. Choose a provider and enter its API key below. Until then the endpoint answers 503 and charges
+          nothing.
         </p>
       )}
+      <h4>LLM provider</h4>
+      <InferenceSettings onSaved={load} />
       <p className="boundary-note">
         Policy limits are enforced by the agent&apos;s own client before it signs, as for swaps; they are not enforced on-chain.
         Payments run on Hedera testnet with testnet USDC.

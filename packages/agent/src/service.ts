@@ -7,6 +7,7 @@ import { advance, chooseGuardian, type Progress } from './wizard';
 import { spend } from './spend';
 import { cancelSchedule, listSchedules, reconcileSchedules, scheduleSwap } from './schedule';
 import { payService, priceOf, type ServiceRequest } from './pay';
+import { clearInferenceSettings, readInferenceSettings, saveInferenceSettings, testInferenceSettings } from './inferenceSettings';
 
 /** Agent work the dashboard can request. Each one runs the same policy-checked code as the CLI. */
 export interface AgentTasks {
@@ -107,6 +108,11 @@ export function createSetupApp(run:()=>Promise<Progress>=()=>advance(),select:(i
     begin('pay',()=>tasks.pay(request));
     return c.json(agentState());
   });
+  // LLM provider settings for the paid inference this agent sells. The key goes in, never out.
+  app.get('/setup/inference',c=>c.json(readInferenceSettings()));
+  app.post('/setup/inference',async c=>c.json(saveInferenceSettings(await c.req.json().catch(()=>null))));
+  app.delete('/setup/inference',c=>c.json(clearInferenceSettings()));
+  app.post('/setup/inference/test',async c=>c.json(await testInferenceSettings()));
   return {app,start,busy:()=>!!task?.running};
 }
 

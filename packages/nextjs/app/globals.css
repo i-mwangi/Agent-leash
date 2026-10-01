@@ -1125,3 +1125,16 @@ button.link {
   font-size: 14px;
   overflow-x: auto;
 }
+.pay-form select.select {
+  border: 1px solid #dce3d6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: #32482f;
+  background: #fff;
+}
+.pay-form small {
+  color: #8a9384;
+  font-size: 11px;
+}

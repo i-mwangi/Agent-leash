@@ -4,7 +4,12 @@ import { encodePaymentSignatureHeader } from '@x402/core/http';
 import { Mirror, mirrorTxId } from '../packages/shared/src/mirror';
 import { Store } from '../packages/shared/src/store';
 import { Payments, type Facilitator } from '../packages/server/src/x402';
-import { complete, inferenceConfig } from '../packages/server/src/inference';
+import { APICallError } from 'ai';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { complete, inferenceConfig } from '../packages/shared/src/inference';
+import { clearInferenceSettings, readInferenceSettings, saveInferenceSettings, testInferenceSettings } from '../packages/agent/src/inferenceSettings';
 import { createApp } from '../packages/server/src/app';
 import { chooseRequirement, serviceUrl, settledOrExpired } from '../packages/agent/src/pay';
 import { dailySpend } from '../packages/shared/src/sources';
@@ -15,21 +20,52 @@ const USDC='0.0.429274';
 const requirement=(overrides:Record<string,unknown>={})=>({scheme:'exact',network:'hedera:testnet' as const,asset:USDC,amount:'10000',payTo:'0.0.6',maxTimeoutSeconds:120,extra:{feePayer:'0.0.5'},...overrides});
 
 describe('paid inference configuration',()=>{
-  it('needs an https provider, a key and a model, and defaults to 0.01 USDC',()=>{
+  it('supports the AI Gateway and direct providers, and reads older base-URL settings as OpenAI-compatible',()=>{
     expect(inferenceConfig({})).toBeNull();
-    expect(inferenceConfig({INFERENCE_BASE_URL:'https://api.example.com/v1/',INFERENCE_API_KEY:'k',INFERENCE_MODEL:'model-1'})).toEqual({baseUrl:'https://api.example.com/v1',apiKey:'k',model:'model-1',price:'10000'});
-    expect(()=>inferenceConfig({INFERENCE_BASE_URL:'http://api.example.com',INFERENCE_API_KEY:'k',INFERENCE_MODEL:'m'})).toThrow('INFERENCE_BASE_URL_INVALID');
-    expect(()=>inferenceConfig({INFERENCE_BASE_URL:'https://api.example.com',INFERENCE_API_KEY:'k',INFERENCE_MODEL:'m',INFERENCE_PRICE:'0'})).toThrow('INFERENCE_PRICE_INVALID');
+    expect(inferenceConfig({INFERENCE_PROVIDER:'gateway',INFERENCE_API_KEY:'vck_12345678',INFERENCE_MODEL:'moonshotai/kimi-k3'})).toEqual({provider:'gateway',apiKey:'vck_12345678',model:'moonshotai/kimi-k3',price:'10000'});
+    expect(inferenceConfig({INFERENCE_BASE_URL:'https://api.example.com/v1/',INFERENCE_API_KEY:'k-12345678',INFERENCE_MODEL:'model-1'})).toMatchObject({provider:'openai-compatible',baseUrl:'https://api.example.com/v1'});
+    expect(()=>inferenceConfig({INFERENCE_PROVIDER:'other',INFERENCE_API_KEY:'k-12345678',INFERENCE_MODEL:'m'})).toThrow('INFERENCE_PROVIDER_INVALID');
+    expect(()=>inferenceConfig({INFERENCE_PROVIDER:'openai-compatible',INFERENCE_BASE_URL:'http://x.org',INFERENCE_API_KEY:'k-12345678',INFERENCE_MODEL:'m'})).toThrow('INFERENCE_BASE_URL_INVALID');
+    expect(()=>inferenceConfig({INFERENCE_PROVIDER:'openai',INFERENCE_API_KEY:'k-12345678',INFERENCE_MODEL:'m',INFERENCE_PRICE:'0'})).toThrow('INFERENCE_PRICE_INVALID');
   });
-  it('calls an OpenAI-compatible endpoint and reports only the status of a provider error',async()=>{
-    const config={baseUrl:'https://api.example.com/v1',apiKey:'secret',model:'m',price:'10000'};
-    const calls:[string,RequestInit][]=[];
-    const ok=vi.fn(async(url:string|URL|Request,init?:RequestInit)=>{calls.push([String(url),init!]);return Response.json({model:'m-1',choices:[{message:{content:'Hello'}}],usage:{prompt_tokens:3,completion_tokens:1}});});
-    expect(await complete(config,'Hi',ok as typeof fetch)).toEqual({model:'m-1',answer:'Hello',usage:{prompt_tokens:3,completion_tokens:1}});
-    expect(calls[0][0]).toBe('https://api.example.com/v1/chat/completions');
-    expect((calls[0][1].headers as Record<string,string>).Authorization).toBe('Bearer secret');
-    expect(JSON.parse(String(calls[0][1].body))).toMatchObject({model:'m',messages:[{role:'user',content:'Hi'}]});
-    await expect(complete(config,'Hi',(async()=>new Response('{"error":"bad key secret"}',{status:401})) as typeof fetch)).rejects.toThrow(/^INFERENCE_UPSTREAM_401$/);
+  it('reports only the status of a provider error, never its message',async()=>{
+    const config={provider:'gateway' as const,apiKey:'vck_12345678',model:'moonshotai/kimi-k3',price:'10000'};
+    expect(await complete(config,'Hi',async options=>{expect(options.prompt).toBe('Hi');expect(options.maxOutputTokens).toBe(512);return {text:'Hello',usage:{inputTokens:3,outputTokens:1}};}))
+      .toEqual({provider:'gateway',model:'moonshotai/kimi-k3',answer:'Hello',usage:{inputTokens:3,outputTokens:1}});
+    const failing=async()=>{throw new APICallError({message:'invalid key vck_12345678',url:'https://x',requestBodyValues:{},statusCode:401});};
+    await expect(complete(config,'Hi',failing)).rejects.toThrow(/^INFERENCE_UPSTREAM_401$/);
+    await expect(complete(config,'Hi',async()=>{throw new Error('socket');})).rejects.toThrow(/^INFERENCE_UPSTREAM_UNAVAILABLE$/);
+  });
+});
+
+describe('provider settings from the dashboard',()=>{
+  const ORIGINAL=['APP_MODE=auto','ATTESTATION_PRIVATE_KEY=0xabc',''].join(String.fromCharCode(10));
+  const root=()=>{const dir=mkdtempSync(join(tmpdir(),'inference-'));writeFileSync(join(dir,'.env.server'),ORIGINAL);return dir;};
+  it('stores the key in .env.server, keeps other lines and never returns the key',()=>{
+    const dir=root();
+    const saved=saveInferenceSettings({provider:'gateway',apiKey:'vck_secret_123',model:'moonshotai/kimi-k3',price:'20000'},dir);
+    expect(JSON.stringify(saved)).not.toContain('vck_secret_123');
+    expect(saved).toMatchObject({configured:true,keySet:true,provider:'gateway',model:'moonshotai/kimi-k3',price:'20000'});
+    const text=readFileSync(join(dir,'.env.server'),'utf8');
+    expect(text).toContain('ATTESTATION_PRIVATE_KEY=0xabc');
+    expect(text).toContain('INFERENCE_API_KEY=vck_secret_123');
+    // Same provider: the saved key is kept when the field is left empty.
+    expect(saveInferenceSettings({provider:'gateway',model:'anthropic/claude-haiku-4.5',price:'20000'},dir).model).toBe('anthropic/claude-haiku-4.5');
+    // A different provider never inherits the key.
+    expect(()=>saveInferenceSettings({provider:'openai',model:'gpt-4o-mini',price:'20000'},dir)).toThrow('INFERENCE_API_KEY_REQUIRED');
+    expect(()=>saveInferenceSettings({provider:'gateway',apiKey:'has space here',model:'m',price:'1'},dir)).toThrow('INFERENCE_SETTINGS_INVALID');
+    expect(()=>saveInferenceSettings({provider:'gateway',apiKey:'vck_secret_123'+String.fromCharCode(10)+'AGENT_PRIVATE_KEY=x',model:'m',price:'1'},dir)).toThrow('INFERENCE_SETTINGS_INVALID');
+    const cleared=clearInferenceSettings(dir);
+    expect(cleared).toMatchObject({configured:false,keySet:false});
+    expect(readFileSync(join(dir,'.env.server'),'utf8')).toBe(ORIGINAL);
+    expect(readInferenceSettings(dir).providers.map(p=>p.id)).toEqual(['gateway','openai','anthropic','google','openai-compatible']);
+  });
+  it('tests the saved settings with one short request',async()=>{
+    const dir=root();
+    await expect(testInferenceSettings(dir)).rejects.toThrow('INFERENCE_NOT_CONFIGURED');
+    saveInferenceSettings({provider:'anthropic',apiKey:'sk-ant-12345678',model:'claude-haiku-4-5',price:'10000'},dir);
+    const result=await testInferenceSettings(dir,async config=>({provider:config.provider,model:config.model,answer:'Ready.',usage:{inputTokens:1,outputTokens:1}}));
+    expect(result).toEqual({ok:true,provider:'Anthropic',model:'claude-haiku-4-5',answer:'Ready.',usage:{inputTokens:1,outputTokens:1}});
   });
 });
 
@@ -42,7 +78,7 @@ describe('selling over x402',()=>{
   });
   it('quotes its price in a 402 challenge and rejects a bad prompt before any payment',async()=>{
     const payments={requirements:vi.fn(async(amount:string)=>requirement({amount})),challenge:new Payments(new Mirror(),new Store(':memory:'),'0.0.6').challenge} as unknown as Payments;
-    const live={deployment:{agentAccount:'0.0.6',standingBaseUrl:'http://localhost:3001',erc8004AgentId:'125'},payments,inference:{baseUrl:'https://x',apiKey:'k',model:'m',price:'20000'}} as unknown as LiveServices;
+    const live={deployment:{agentAccount:'0.0.6',standingBaseUrl:'http://localhost:3001',erc8004AgentId:'125'},payments,inference:()=>({provider:'gateway',apiKey:'k-12345678',model:'m',price:'20000'})} as unknown as LiveServices;
     const app=createApp('testnet',()=>live);
     expect((await app.request('/paid/inference',{method:'POST',body:JSON.stringify({prompt:''})})).status).toBe(400);
     const response=await app.request('/paid/inference',{method:'POST',body:JSON.stringify({prompt:'Hi'})});
