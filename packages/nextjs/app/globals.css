@@ -1034,3 +1034,57 @@ code.command {
   background: #e6efe0;
   color: #2f5d3a;
 }
+
+.dex-task {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) auto auto;
+  gap: 12px;
+  align-items: center;
+  margin: 12px 0;
+}
+.dex-task .amount-field {
+  margin: 0;
+}
+.dex-task .primary {
+  width: auto;
+  margin: 0;
+}
+.dex-mode {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.dex-mode label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  color: #32482f;
+}
+.dex-mode input[type="datetime-local"] {
+  border: 1px solid #dce3d6;
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+}
+.card-table th small {
+  display: block;
+  font-weight: 400;
+  color: #8a9384;
+}
+button.link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: #2f5d3a;
+  text-decoration: underline;
+  cursor: pointer;
+}
+@media (max-width: 720px) {
+  .dex-task {
+    grid-template-columns: 1fr;
+  }
+}

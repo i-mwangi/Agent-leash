@@ -6,6 +6,7 @@ import { approveVaultTerms, deployVault, vaultStatus, allowVaultRecipients, guar
 import { Mirror } from '../../shared/src/mirror';
 import { fallbackQuote, readFacts, quote } from '../../shared/src/sources';
 import { spend } from './spend';
+import { cancelSchedule, listSchedules, reconcileSchedules, scheduleSwap } from './schedule';
 import { payStanding } from './payment';
 import { startMcp } from './mcp';
 import { onboard, prepareAgreement, approveAgreement } from './agreement';
@@ -59,7 +60,10 @@ async function main(){
   if(command==='quote-fallback') return fallbackQuote(d,new Mirror(),BigInt(uint.parse(args[0])));
   if(command==='spend') return spend(BigInt(uint.parse(args[0])));
   if(command==='pay-standing') return payStanding();
-  throw new AppError('USAGE: set-standing-url HTTPS_URL | lookup AGENT_ID | give-feedback AGENT_ID SCORE [TAG] | onboard | draft-agreement | approve-agreement | draft-vault-terms FILE | approve-vault-terms | deploy-vault | vault-status | allow-vault-recipients | fund-vault TINYBARS | vault-spend RECIPIENT TINYBARS | vault-pause | vault-unpause | vault-revoke | vault-recover | init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | evidence',400);
+  if(command==='schedule-swap') {if(!args[1]) throw new AppError('EXECUTE_AT_REQUIRED',400);return scheduleSwap(BigInt(uint.parse(args[0])),args[1]);}
+  if(command==='schedules') {await reconcileSchedules();return listSchedules();}
+  if(command==='cancel-schedule') return cancelSchedule(args[0]??'');
+  throw new AppError('USAGE: set-standing-url HTTPS_URL | lookup AGENT_ID | give-feedback AGENT_ID SCORE [TAG] | onboard | draft-agreement | approve-agreement | draft-vault-terms FILE | approve-vault-terms | deploy-vault | vault-status | allow-vault-recipients | fund-vault TINYBARS | vault-spend RECIPIENT TINYBARS | vault-pause | vault-unpause | vault-revoke | vault-recover | init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | schedule-swap AMOUNT ISO_TIME | schedules | cancel-schedule SCHEDULE_ID | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | evidence',400);
 }
 if(command==='mcp') startMcp().catch(()=>{console.error('MCP_START_FAILED');process.exitCode=1;});
 else main().then(result=>console.log(JSON.stringify(jsonSafe(result),null,2))).catch(error=>{console.error(error instanceof AppError?error.code:error instanceof Error?error.message:'COMMAND_FAILED');process.exitCode=1;});

@@ -6,6 +6,7 @@ import { readDeployment } from '../../shared/src/files';
 import { fallbackQuote, quote, policySnapshot } from '../../shared/src/sources';
 import { recentRegistrations, resolveAgent } from '../../shared/src/resolve';
 import { recentFills } from '../../shared/src/fills';
+import { compareVenues } from '../../shared/src/venues';
 import type { ConsensusEvent } from '../../shared/src/model';
 import { Mirror } from '../../shared/src/mirror';
 
@@ -116,6 +117,11 @@ export function createApp(modeInput:string|(()=>string) = "demo", services:()=>L
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
     const parsed=uint.safeParse(c.req.query('amount')); if(!parsed.success) throw new AppError('INVALID_AMOUNT',400);
     return c.json(await fallbackQuote(live.deployment,live.mirror,BigInt(parsed.data)));
+  });
+  // Public mainnet market data from SaucerSwap and Lambdaplex; read-only and independent of setup.
+  app.get('/dex/venues',async c=>{
+    const parsed=uint.safeParse(c.req.query('amount')); if(!parsed.success) throw new AppError('INVALID_AMOUNT',400);
+    return c.json(await compareVenues(BigInt(parsed.data)));
   });
   app.get('/agent/fills',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');

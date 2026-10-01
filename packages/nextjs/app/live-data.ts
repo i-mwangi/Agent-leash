@@ -16,6 +16,13 @@ export function tokenAmount(raw:string,decimals:number) {
   const fraction=decimals?(value%scale).toString().padStart(decimals,'0').replace(/0+$/,''):'';
   return fraction?`${whole}.${fraction}`:whole;
 }
+/** "0.5" with 6 decimals → 500000n. Refuses more decimals than the token has rather than rounding. */
+export function toUnits(text:string,decimals:number):bigint|null {
+  const match = /^(\d{1,20})(?:\.(\d+))?$/.exec(text.trim());
+  if (!match || (match[2] ?? "").length > decimals) return null;
+  const value = BigInt(match[1] + (match[2] ?? "").padEnd(decimals, "0"));
+  return value > 0n ? value : null;
+}
 export type ReadState={value:LiveRead|null;loading:boolean;error:string|null};
 
 /** A refresh invalidates old readings immediately; obsolete responses cannot restore them. */

@@ -13,7 +13,7 @@ export async function recentFills(d:Pick<Deployment,'agentAccount'|'spendAsset'|
     const transactionId=String(payload.transactionId??'');
     let received:string|null=null;
     if(payload.status==='success') {
-      const {transfers}=await mirror.contractTransfers(transactionId).catch(()=>({transfers:[]}));
+      const {transfers}=await mirror.contractTransfers(transactionId,payload.scheduled===true).catch(()=>({transfers:[]}));
       const net=transfers.filter(t=>t.account===d.agentAccount && t.token_id===d.outputAsset).reduce((n,t)=>n+exactUnits(t.amount),0n);
       received=net>0n?net.toString():null;
     }
@@ -23,6 +23,7 @@ export async function recentFills(d:Pick<Deployment,'agentAccount'|'spendAsset'|
       amount:String(payload.amount??''),
       received,
       reason:typeof payload.reason==='string'?payload.reason:null,
+      scheduleId:typeof payload.scheduleId==='string'?payload.scheduleId:null,
       recordedAt:event.consensusTimestamp,
       sequence:event.sequence,
     };

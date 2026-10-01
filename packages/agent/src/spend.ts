@@ -29,13 +29,15 @@ export async function spend(amount:bigint) {
     if(!initial.ok) throw new AppError(initial.reason);
     // Quote first. A missing testnet pool is a read-only integration, never a synthetic fill.
     const estimate=await quote(d,mirror,amount);
+    // Approve replaces the allowance, so keep covering swaps already scheduled to execute later.
+    const needed=amount+store.scheduledOutstanding(d.spendAsset);
     const allowance=BigInt((await mirror.call(evmAddress(d.spendAsset),TOKEN_ABI,'allowance',[account,router]))[0]);
-    if(allowance<amount) {
-      await guardedSign(read,d.spendAsset,amount,()=>nativeOperation(`approve-${d.spendAsset}-${amount}`,new ContractExecuteTransaction()
+    if(allowance<needed) {
+      await guardedSign(read,d.spendAsset,amount,()=>nativeOperation(`approve-${d.spendAsset}-${needed}-${Date.now()}`,new ContractExecuteTransaction()
         .setContractId(d.spendAsset).setGas(1_000_000)
-        .setFunctionParameters(getBytes(TOKEN_ABI.encodeFunctionData('approve',[router,amount]))),client,store));
+        .setFunctionParameters(getBytes(TOKEN_ABI.encodeFunctionData('approve',[router,needed]))),client,store));
       const fresh=BigInt((await mirror.call(evmAddress(d.spendAsset),TOKEN_ABI,'allowance',[account,router]))[0]);
-      if(fresh<amount) throw new AppError('ALLOWANCE_UNCONFIRMED');
+      if(fresh<needed) throw new AppError('ALLOWANCE_UNCONFIRMED');
     }
     const minimum=BigInt(estimate.amountOut)*99n/100n;
     const deadline=BigInt(Math.floor(Date.now()/1000)+120);

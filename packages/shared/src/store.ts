@@ -4,6 +4,7 @@ import { dirname } from 'node:path';
 import { AppError } from './model';
 interface PaymentRow { tx_id:string; payload_hash:string; resource:string; response:string|null; created:number }
 export interface SpendRow { tx_id:string; asset:string; amount:string; day:string; status:string; recorded:number }
+export interface ScheduleRow { schedule_id:string; tx_id:string; asset:string; amount:string; minimum:string; execute_at:string; status:'pending'|'executed'|'failed'|'cancelled'|'expired'; reason:string|null; created:number }
 /** Single-machine durable coordination. Share one DB for all local agent processes. */
 export class Store {
   readonly db:DatabaseSync;
@@ -15,6 +16,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS spends(tx_id TEXT PRIMARY KEY,asset TEXT NOT NULL,amount TEXT NOT NULL,day TEXT NOT NULL,status TEXT NOT NULL,recorded INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS operations(name TEXT PRIMARY KEY,tx_id TEXT NOT NULL,result TEXT);
       CREATE TABLE IF NOT EXISTS locks(name TEXT PRIMARY KEY,created INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS schedules(schedule_id TEXT PRIMARY KEY,tx_id TEXT NOT NULL,asset TEXT NOT NULL,amount TEXT NOT NULL,minimum TEXT NOT NULL,execute_at TEXT NOT NULL,status TEXT NOT NULL,reason TEXT,created INTEGER NOT NULL);
     `);
   }
   close(){this.db.close();}
@@ -37,6 +39,11 @@ export class Store {
   reserve(txId:string,asset:string,amount:bigint,day:string) { this.db.prepare("INSERT INTO spends(tx_id,asset,amount,day,status) VALUES(?,?,?,?,'pending')").run(txId,asset,amount.toString(),day); }
   spends(){return this.db.prepare('SELECT * FROM spends').all() as unknown as SpendRow[];}
   updateSpend(txId:string,status:'pending'|'success'|'failed',recorded=false){this.db.prepare('UPDATE spends SET status=?,recorded=? WHERE tx_id=?').run(status,recorded?1:0,txId);}
+  addSchedule(row:Omit<ScheduleRow,'status'|'reason'|'created'>) { this.db.prepare("INSERT INTO schedules(schedule_id,tx_id,asset,amount,minimum,execute_at,status,created) VALUES(?,?,?,?,?,?,'pending',?)").run(row.schedule_id,row.tx_id,row.asset,row.amount,row.minimum,row.execute_at,Date.now()); }
+  schedules(){return this.db.prepare('SELECT * FROM schedules ORDER BY execute_at DESC').all() as unknown as ScheduleRow[];}
+  finishSchedule(id:string,status:Exclude<ScheduleRow['status'],'pending'>,reason:string|null=null){this.db.prepare("UPDATE schedules SET status=?,reason=? WHERE schedule_id=? AND status='pending'").run(status,reason,id);}
+  /** Spend still committed to scheduled swaps; the router allowance must keep covering it. */
+  scheduledOutstanding(asset:string){return this.schedules().filter(s=>s.asset===asset && s.status==='pending').reduce((sum,s)=>sum+BigInt(s.amount),0n);}
   outstanding(asset:string,confirmed:Set<string>) {
     // Pending from earlier days remains reserved until authoritative reconciliation.
     return this.spends().filter(s=>s.asset===asset && s.status!=='failed' && !confirmed.has(s.tx_id)).reduce((sum,s)=>sum+BigInt(s.amount),0n);

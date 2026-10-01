@@ -16,9 +16,9 @@ Accountable Agent gives an AI agent on Hedera testnet a 1-of-2 account it shares
 
 | Where | What lives there |
 | --- | --- |
-| `packages/agent/src/` | CLI (`cli.ts`), setup shared by CLI and browser (`setup.ts`), browser-setup runtime (`service.ts`, `wizard.ts`), pre-signing policy check (`policyClient.ts`), spend, vault, feedback, MCP (`mcp.ts`) |
+| `packages/agent/src/` | CLI (`cli.ts`), setup shared by CLI and browser (`setup.ts`), local runtime for browser setup and dashboard agent tasks (`service.ts`, `wizard.ts`), pre-signing policy check (`policyClient.ts`), spend, scheduled swaps (`schedule.ts`), vault, feedback, MCP (`mcp.ts`) |
 | `packages/server/src/` | Hono API: modes (`index.ts`), routes (`app.ts`), live sources (`live.ts`), x402 settlement (`x402.ts`) |
-| `packages/shared/src/` | Mirror client, `readFacts` identity verification (`sources.ts`), agent lookup and reputation (`resolve.ts`), agreement and standing formats, UAID, vault terms |
+| `packages/shared/src/` | Mirror client, `readFacts` identity verification (`sources.ts`), agent lookup and reputation (`resolve.ts`), read-only mainnet venue prices (`venues.ts`), agreement and standing formats, UAID, vault terms |
 | `packages/contracts/contracts/` | `PolicyRegistry.sol` (client-enforced policy) and `GuardedHbarVault.sol` (contract-enforced HBAR) with Solidity tests |
 | `packages/nextjs/app/` | Dashboard; `setup-wizard.tsx` (browser setup), `guardian-wallet.tsx` (HashPack actions), `agent-lookup.tsx` |
 | `tests/` | Deterministic tests; `agent-lookup.test.ts` shows how to fake the mirror |
@@ -32,12 +32,14 @@ Accountable Agent gives an AI agent on Hedera testnet a 1-of-2 account it shares
 | Guardian key | HashPack (browser setup) or `.env.guardian` (CLI setup) | API, dashboard code |
 | Attestation key (`.env.server`) | API, to sign standing reports | Anything else |
 
-The API refuses to start with spend keys in its environment. The agent runtime listens on loopback only and rejects requests without its setup header or from another web origin.
+The API refuses to start with spend keys in its environment. The agent runtime listens on loopback only and rejects requests without its setup header or from another web origin; that includes the dashboard's swap and schedule requests, which run the same policy-checked code as the CLI.
 
 ## Making changes
 
 - **Setup steps**: `setup.ts` serves both the CLI and browser setup; `wizard.ts` decides which wallet step the browser shows next. Every on-chain write goes through `nativeOperation`, which records the transaction before sending so a retry never duplicates it. Keep that.
 - **Spending rules**: `policyClient.ts` is a pure function with its own tests. The agent must run it against fresh mirror reads immediately before signing.
+- **Scheduled swaps**: `schedule.ts` checks the policy before signing the `ScheduleCreate`; Hedera does not check it at execution. Keep the reservation until the outcome is recorded, the guardian as an admin key, the runtime's cancel-on-refusal check, and reads with `scheduled=true` for the executed transaction (its child transfers come from the unfiltered rows).
+- **Venue prices**: `venues.ts` is read-only mainnet data. Never sign or submit on mainnet, and report a venue that fails rather than estimating it.
 - **Standing report fields**: `packages/shared/src/standing.ts`. Add a new signed version rather than changing an existing one; the version 1–3 tests are pinned.
 - **Verifying agents**: change `readFacts` in `sources.ts`; it backs standing, the dashboard and `resolveAgent`, so all of them stay consistent.
 - **Dashboard data**: add an API route in `app.ts`, then read it through the `/api` proxy. The browser never talks to the agent runtime except through `/setup`.

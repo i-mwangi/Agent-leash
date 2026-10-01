@@ -65,11 +65,12 @@ export async function dailySpend(events:ConsensusEvent[],account:string,asset:st
   for(const event of events.filter(e=>e.type==='fill' && e.payload.status==='success')) {
     const txId=mirrorTxId(String(event.payload.transactionId));
     if(confirmed.has(txId)) continue;
-    const tx=await mirror.transaction(txId);
+    const scheduled=event.payload.scheduled===true;
+    const tx=await mirror.transaction(txId,scheduled);
     if(tx.result!=='SUCCESS') throw new AppError('HCS_FILL_MISMATCH');
     confirmed.add(txId);
     if(new Date(Number(tx.consensus_timestamp.split('.')[0])*1000).toISOString().slice(0,10)!==today) continue;
-    const {transfers}=await mirror.contractTransfers(txId);
+    const {transfers}=await mirror.contractTransfers(txId,scheduled);
     const net=transfers.filter(t=>t.account===account && t.token_id===asset).reduce((n,t)=>n+exactUnits(t.amount),0n);
     if(net<0n) total-=net;
   }

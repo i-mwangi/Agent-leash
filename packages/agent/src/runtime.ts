@@ -20,7 +20,7 @@ export function roleKey(role:'operator'|'guardian'|'agent') {
 export function clientFor(account:string,key:PrivateKey) {
   return Client.forTestnet().setOperator(account,key).setDefaultMaxTransactionFee(new Hbar(3)).setMaxQueryPayment(new Hbar(1));
 }
-export interface OperationResult {txId:string;accountId?:string;topicId?:string;contractId?:string;fileId?:string;returnData?:string}
+export interface OperationResult {txId:string;accountId?:string;topicId?:string;contractId?:string;fileId?:string;scheduleId?:string;returnData?:string}
 export async function nativeOperation(name:string,tx:Transaction,client:ReturnType<typeof clientFor>,store:Store,additional:PrivateKey[]=[],getReturn=false,beforeSend?:(txId:string)=>void):Promise<OperationResult> {
   const old=store.operation(name);
   if(old?.result) return JSON.parse(old.result);
@@ -39,7 +39,7 @@ export async function nativeOperation(name:string,tx:Transaction,client:ReturnTy
   const response=await tx.execute(client);
   const receipt=await response.getReceipt(client);
   if(receipt.status.toString()!=='SUCCESS') throw new AppError('TRANSACTION_FAILED');
-  const result:OperationResult={txId,accountId:receipt.accountId?.toString(),topicId:receipt.topicId?.toString(),contractId:receipt.contractId?.toString(),fileId:receipt.fileId?.toString()};
+  const result:OperationResult={txId,accountId:receipt.accountId?.toString(),topicId:receipt.topicId?.toString(),contractId:receipt.contractId?.toString(),fileId:receipt.fileId?.toString(),scheduleId:receipt.scheduleId?.toString()};
   store.endOperation(name,result);
   if(getReturn) {
     const record=await response.getRecord(client);

@@ -22,7 +22,7 @@ Anyone can hand an AI agent a wallet. Nothing about that wallet makes the agent 
 - **Agent lookup and reputation** — verify any other agent by its ERC-8004 ID before dealing with it, and rate agents you dealt with in the ERC-8004 reputation registry on Hedera
 - **Contract-enforced vault (optional)** — caps, recipient allowlist, pause and recovery that hold even if the agent bypasses its client
 - **Guardian wallet controls** — pause, unpause and vault recovery from HashPack in the dashboard
-- **Optional DEX example** — a policy-checked SaucerSwap swap on testnet
+- **DEX on demand or on a schedule (optional)** — tell the agent to swap on SaucerSwap now, or at a set time through the Hedera Schedule Service, always after a policy check; compare live mainnet prices on SaucerSwap and Lambdaplex
 
 ---
 
@@ -135,8 +135,10 @@ flowchart LR
     REG["ERC-8004 identity +<br/>reputation registries"]
     HTS["HTS USDC, SAUCE"]
     DEX["SaucerSwap V1"]
+    HSS["Schedule Service"]
     MIR["Mirror node"]
   end
+  LPX["Lambdaplex market data<br/>(mainnet, read-only)"]
 
   UI -- "/api proxy" --> API
   UI -- "/setup proxy" --> RT
@@ -144,6 +146,8 @@ flowchart LR
   HP -- "fund setup account, create topic,<br/>allow asset, approve agreement, pause" --> hedera
   RT -- "agent account, UAID, policy deploy,<br/>token association, registration" --> hedera
   CLI -- "policy-checked spends, vault,<br/>reviews of other agents" --> hedera
+  RT -- "swaps now, or scheduled<br/>for Hedera to execute" --> HSS
+  API -- "venue prices" --> LPX
   API -- "identity, policy, settlement reads" --> MIR
   BUY -- "GET /standing (x402)" --> API
   API -- "verify and settle" --> FAC
@@ -158,16 +162,18 @@ flowchart LR
 
 Each integration carries part of the template's job. Removing any of the first four removes a capability, not a feature flag.
 
-| Integration                      | What it does here                                                                                                                                      | Why the template needs it                                                                                                                                      | Live evidence                                                                                                                                                                |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **x402 + Blocky402**             | Sells the signed standing report: `402 Payment Required`, Blocky402 verifies and settles 0.001 USDC, the API confirms the exact transfer on the mirror | Standing is how a counterparty checks the agent before trusting it; x402 makes that check payable by another agent over plain HTTP, with no account or API key | [Paid standing](#cli-deployment-2527-september-2026), [version 2](#cli-deployment-2527-september-2026) and [version 3](#vaults) reports                                      |
-| **ERC-8004 identity registry**   | Registers each agent; its card names the account, guardian, HCS topic, UAID, policy and standing endpoint; lookups verify any agent from it            | The shared directory where other agents find this one and see who answers for it                                                                               | Agents [121](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [125](https://hashscan.io/testnet/transaction/0.0.10798471%401790805543.885864012) |
-| **ERC-8004 reputation registry** | Agents rate agents they dealt with; every lookup lists the reviews with their reviewers                                                                | Turns individual checks into a shared track record; the registry blocks owners from rating their own agent                                                     | [First review](#agent-to-agent-lookup-and-review)                                                                                                                            |
-| **HashPack (WalletConnect)**     | The guardian approves setup and signs pause, unpause and vault controls; the guardian key never leaves the wallet                                      | Puts a human in control without the template ever holding the guardian's key                                                                                   | [HashPack setup run](#browser-setup), [vault controls](#vaults)                                                                                                              |
-| **SaucerSwap V1**                | The agent's example spend: a policy-checked SAUCE → WHBAR swap; the dashboard reads live quotes                                                        | Shows the policy check guarding a real DeFi action, not a mock transfer                                                                                        | [Policy-checked swap](#saucerswap)                                                                                                                                           |
-| **HCS-14 UAID**                  | A standards-derived identifier published to the agent's topic and its card                                                                             | Gives the agent one portable ID other HCS tools can resolve                                                                                                    | [UAID message](https://hashscan.io/testnet/transaction/0.0.5792828%401790349056.243185055)                                                                                   |
+| Integration                      | What it does here                                                                                                                                                   | Why the template needs it                                                                                                                                      | Live evidence                                                                                                                                                                |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **x402 + Blocky402**             | Sells the signed standing report: `402 Payment Required`, Blocky402 verifies and settles 0.001 USDC, the API confirms the exact transfer on the mirror              | Standing is how a counterparty checks the agent before trusting it; x402 makes that check payable by another agent over plain HTTP, with no account or API key | [Paid standing](#cli-deployment-2527-september-2026), [version 2](#cli-deployment-2527-september-2026) and [version 3](#vaults) reports                                      |
+| **ERC-8004 identity registry**   | Registers each agent; its card names the account, guardian, HCS topic, UAID, policy and standing endpoint; lookups verify any agent from it                         | The shared directory where other agents find this one and see who answers for it                                                                               | Agents [121](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [125](https://hashscan.io/testnet/transaction/0.0.10798471%401790805543.885864012) |
+| **ERC-8004 reputation registry** | Agents rate agents they dealt with; every lookup lists the reviews with their reviewers                                                                             | Turns individual checks into a shared track record; the registry blocks owners from rating their own agent                                                     | [First review](#agent-to-agent-lookup-and-review)                                                                                                                            |
+| **HashPack (WalletConnect)**     | The guardian approves setup and signs pause, unpause and vault controls; the guardian key never leaves the wallet                                                   | Puts a human in control without the template ever holding the guardian's key                                                                                   | [HashPack setup run](#browser-setup), [vault controls](#vaults)                                                                                                              |
+| **SaucerSwap V1**                | The agent's example spend: a policy-checked SAUCE → WHBAR swap on testnet, now or scheduled, started from the dashboard or CLI; mainnet quotes for price comparison | Shows the policy check guarding a real DeFi action, not a mock transfer                                                                                        | [Policy-checked swap](#saucerswap), [scheduled swap](#scheduled-swaps-and-venue-prices)                                                                                      |
+| **Hedera Schedule Service**      | A scheduled swap is signed now and executed by Hedera at the chosen time; the guardian and the agent are both admin keys and can delete it                          | Lets a guardian direct the agent to act later without a process staying up to sign; revoking the agent key stops it at execution                               | [Scheduled, cancelled and revoked schedules](#scheduled-swaps-and-venue-prices)                                                                                              |
+| **Lambdaplex**                   | Read-only HBAR/USDC order book from its public API, compared with SaucerSwap for the same amount, including how much the book can fill                              | Price discovery across Hedera venues before the agent trades. Lambdaplex settles on mainnet only, so the agent compares it and does not trade there            | [Venue comparison](#scheduled-swaps-and-venue-prices)                                                                                                                        |
+| **HCS-14 UAID**                  | A standards-derived identifier published to the agent's topic and its card                                                                                          | Gives the agent one portable ID other HCS tools can resolve                                                                                                    | [UAID message](https://hashscan.io/testnet/transaction/0.0.5792828%401790349056.243185055)                                                                                   |
 
-Hedera services used: **native accounts** with a 1-of-2 `KeyList` (agent and guardian) and guardian key rotation; **HCS** for the identity, policy, agreement, guardian-action and fill records; **HTS** for USDC and SAUCE; **smart contracts** (`PolicyRegistry`, `GuardedHbarVault`, the ERC-8004 registries, the SaucerSwap router); and the **mirror node** as the source of truth for every check.
+Hedera services used: **native accounts** with a 1-of-2 `KeyList` (agent and guardian) and guardian key rotation; **HCS** for the identity, policy, agreement, guardian-action and fill records; **HTS** for USDC and SAUCE; **smart contracts** (`PolicyRegistry`, `GuardedHbarVault`, the ERC-8004 registries, the SaucerSwap router); the **Schedule Service** for swaps executed later; and the **mirror node** as the source of truth for every check.
 
 A paid standing check, end to end:
 
@@ -208,6 +214,7 @@ sequenceDiagram
 - **The native account's limits are client-enforced.** A native 1-of-2 Hedera key **does not enforce caps, pause or recipients** against an agent that bypasses the supplied client. The HCS policy record describes those limits; it does not make them mandatory. Only HBAR deposited into the vault is under contract-enforced rules; HBAR and HTS tokens (USDC, SAUCE) in the native account are not.
 - **Vault standing is opt-in.** The API reads the local public vault record at startup; restart it after deploying or replacing a vault. Without a configured vault, standing remains version 1 or 2; it does not claim that no other vault exists.
 - **Revocation cannot undo past spending.**
+- **A scheduled swap is not re-checked by Hedera.** The policy is checked when the swap is scheduled. While the agent runtime is running it deletes a pending swap that a pause, a lower per-transaction cap or a removed token would now refuse; if the runtime is stopped, only deleting the schedule or revoking the agent key stops it.
 - **Testnet only.** SaucerSwap is an optional spending example, not a prerequisite for paid standing.
 
 ---
@@ -270,17 +277,25 @@ npm run agent -- vault-revoke
 - The dashboard's **Contract-controlled HBAR vault** panel lets the guardian's HashPack account pause, unpause, revoke the vault agent and recover the full balance. Each request re-verifies the vault; confirmation checks the mirror payer, contract, result and exact calldata. **Check transaction** reads an existing receipt without resubmitting.
 - The CLI supports one local vault at a time. Legacy vault `0.0.10748172` predates immutable terms: the CLI refuses new funding and agent spending for it, while pause, revocation and recovery remain. Changing source code does not upgrade a deployed contract.
 
-### Optional SaucerSwap example
+### Optional DEX: swaps now, on a schedule, and venue prices
+
+The dashboard's **Optional DEX** page passes your instructions to the local agent runtime, which holds the agent key: **Swap now**, or **Schedule swap** for a time between two minutes and seven days ahead. It also compares what selling HBAR for USDC returns on SaucerSwap and on Lambdaplex right now. The same actions from the CLI:
 
 ```sh
-npm run agent -- quote 1000
+npm run agent -- quote 1000000
 npm run agent -- fund-dex 100000000
 npm run agent -- spend 1000000
+npm run agent -- schedule-swap 1000000 2026-10-02T09:00:00Z
+npm run agent -- schedules
+npm run agent -- cancel-schedule 0.0.12345
 ```
 
-- Amounts are raw smallest units. Testnet USDC `0.0.429274` and SAUCE `0.0.1183558` both have six decimals: `1000` is 0.001 USDC and `1000000` is 1 SAUCE.
+- Amounts are raw smallest units. Testnet USDC `0.0.429274` and SAUCE `0.0.1183558` both have six decimals: `1000` is 0.001 USDC and `1000000` is 1 SAUCE. The dashboard converts the amount you type using the decimals read from the mirror.
 - `fund-dex 100000000` uses up to 1 HBAR of operator funds to buy testnet SAUCE for the agent. It is a funding trade, not the policy-gated agent spend. Check the live quote and operator balance first.
 - `spend` serializes requests, reserves the amount durably before submission, checks mirror-backed account, HCS, registry, policy and balance sources immediately before signing, and confirms the router call and token amounts before publishing a fill. Uncertain submissions stay reserved; a mirror-confirmed failed swap is recorded to HCS and released.
+- `schedule-swap` runs the same policy check, then signs a `ScheduleCreate` that wraps the router call, with `waitForExpiry` set to the chosen time and a 1-of-2 admin key (guardian and agent). It accepts up to 3% less output than quoted, keeps the router allowance covering every pending schedule, reserves the amount against the daily limit until the outcome is recorded, and publishes a `scheduled` record to HCS.
+- The agent runtime checks pending schedules every 20 seconds (`schedules` does the same once). It records each outcome on HCS from the mirror (success after checking the token movements, failure, expiry or cancellation) and deletes a pending swap that the current policy would refuse. **Cancel as guardian** in the dashboard deletes it from HashPack with the guardian key, independently of the agent; this button has not yet been tried with HashPack.
+- Venue prices are read from Hedera mainnet: SaucerSwap V1 (router `0.0.3045981`, WHBAR `0.0.1456986`, USDC `0.0.456858`, token decimals checked on the mainnet mirror) and the Lambdaplex public API (`/api/v1/depth` and `/api/v1/avgPrice` for `HBAR-USDC`). The comparison is read-only, excludes fees and reports how much the order book can fill. Lambdaplex has no testnet deployment, so the agent does not trade there.
 - New deployments use the live SaucerSwap V1 SAUCE → WHBAR pool. For an older USDC → WHBAR deployment, run `restore` if the agent key was revoked, then `configure-dex`.
 - Run guardian `revoke` only after the intended agent spends.
 
@@ -348,6 +363,8 @@ Run as `npm run agent -- <command>`.
 | `vault-pause` / `vault-unpause` / `vault-revoke` / `vault-recover` | Guardian vault controls                                                     |
 | `quote AMOUNT` / `quote-fallback AMOUNT`                           | Read-only SaucerSwap quotes                                                 |
 | `fund-dex TINYBARS` / `spend AMOUNT` / `configure-dex`             | DEX funding, policy-checked swap, route update                              |
+| `schedule-swap AMOUNT ISO_TIME`                                    | Policy-checked swap that Hedera executes at the given time                  |
+| `schedules` / `cancel-schedule SCHEDULE_ID`                        | Record scheduled-swap outcomes and list them / delete a pending one         |
 | `init` / `setup` / `register` / `adopt PUBLIC_DEPLOYMENT_JSON`     | Individual setup steps and reattaching an existing deployment               |
 | `set-standing-url HTTPS_URL`                                       | Publish a reachable standing base URL in the agent's ERC-8004 card          |
 | `lookup AGENT_ID`                                                  | Verify any agent by ERC-8004 ID and list its reviews (read-only)            |
@@ -401,9 +418,9 @@ Tests are deterministic and need no funded accounts. The pinned raw-digest Heder
 ```
 agent-leash/
 ├── packages/
-│   ├── agent/        # CLI, local setup runtime (service.ts, wizard.ts), policy guard, vault, swap, MCP
+│   ├── agent/        # CLI, local runtime (service.ts, wizard.ts), policy guard, vault, swaps and scheduled swaps, MCP
 │   ├── server/       # Hono API: x402 settlement, signed standing, auto/testnet/demo modes
-│   ├── shared/       # Mirror and HCS readers, identity checks, UAID, agreement and vault verification
+│   ├── shared/       # Mirror and HCS readers, identity checks, UAID, agreement and vault verification, venue prices
 │   ├── contracts/    # PolicyRegistry (client-enforced policy) and GuardedHbarVault (contract-enforced HBAR)
 │   └── nextjs/       # Dashboard: demo, browser setup, live status, guardian wallet controls
 ├── tests/            # Vitest suites (deterministic, no funded accounts)
@@ -500,6 +517,18 @@ On 1 October 2026 the CLI agent (ERC-8004 `121`, account `0.0.10715883`) looked 
 The V1 router `0.0.19264` exists on testnet, but there is no USDC → WHBAR pool, so new scaffolds use the SAUCE → WHBAR V1 pool. On 25 September 2026 [the operator bought 54.935622 SAUCE for the agent with 1 HBAR](https://hashscan.io/testnet/transaction/0.0.5792828%401790369426.644109430), [the policy-checked agent swapped 1 SAUCE for 0.01809430 WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790369523.124021573) and [published the fill](https://hashscan.io/testnet/transaction/0.0.10715883%401790369529.955985574). Hedera reports the HTS transfers on the contract call's child nonces; the adapter checks those rows and the router parent before accepting a fill.
 
 The browser-set-up agent `125` made the same kind of swap on 1 October 2026. Its setup account [bought 54.872058 SAUCE for the agent](https://hashscan.io/testnet/transaction/0.0.10798471%401790808878.898287168) with `fund-dex`; the agent then checked its policy and [swapped 0.5 SAUCE for 0.00905763 WHBAR](https://hashscan.io/testnet/transaction/0.0.10798474%401790849202.494431270), confirmed the token movements on the mirror and recorded the fill as HCS message 7 on topic `0.0.10798482`. The policy's daily usage then read 0.5 of 5 SAUCE, and the dashboard's Optional DEX page lists the swap with the received amount read from the mirror.
+
+### Scheduled swaps and venue prices
+
+On 1 October 2026 the CLI agent `121` (account `0.0.10715883`) used the new DEX code on testnet:
+
+- **Swap now:** it checked its policy and [swapped 0.3 SAUCE for 0.00543457 WHBAR](https://hashscan.io/testnet/transaction/0.0.10715883%401790855729.877392525), then [recorded the fill](https://hashscan.io/testnet/transaction/0.0.10715883%401790855733.099589526).
+- **Scheduled:** it [created schedule `0.0.10807893`](https://hashscan.io/testnet/transaction/0.0.10715883%401790855750.869779418) for 0.3 SAUCE at 11:58:45 UTC, with the guardian and agent keys as a 1-of-2 admin key. [Hedera executed the router call](https://hashscan.io/testnet/schedule/0.0.10807893) at 11:58:45 UTC. The agent confirmed the 0.3 SAUCE debit and 0.00543457 WHBAR credit on the mirror's child records and [recorded the success](https://hashscan.io/testnet/transaction/0.0.10715883%401790855976.366883803) as HCS message 19. The policy's daily usage then read 0.6 SAUCE, counting both swaps.
+- **Cancelled on pause:** it scheduled 0.2 SAUCE as `0.0.10807905`. The guardian then [paused the policy](https://hashscan.io/testnet/transaction/0.0.10715881%401790855801.528668459). The agent's next check [deleted the schedule](https://hashscan.io/testnet/transaction/0.0.10715883%401790855932.283457907) and [recorded it as cancelled for `PAUSED`](https://hashscan.io/testnet/transaction/0.0.10715883%401790855937.655725776). The guardian then [unpaused](https://hashscan.io/testnet/transaction/0.0.10715881%401790855993.634293808).
+- **Revocation stops a signed schedule:** in a separate experiment, two throwaway accounts each signed a scheduled 0.1 HBAR transfer, and one account's key was replaced before expiry. At expiry the [unchanged account's schedule](https://hashscan.io/testnet/schedule/0.0.10807700) executed with `SUCCESS`, while [the other's](https://hashscan.io/testnet/schedule/0.0.10807702) failed with `INVALID_PAYER_SIGNATURE` and moved nothing. Revoking the agent key is an account key change of the same kind.
+- **Venue prices:** at 11:47 UTC the comparison for 100 HBAR returned 10.406786 USDC from SaucerSwap V1 on mainnet and 10.329 USDC from the Lambdaplex order book (best bid 0.103290). For 5,000 HBAR the book could fill only 435 HBAR, which the comparison reports instead of estimating.
+
+The dashboard's swap and schedule buttons call the same functions through the agent runtime, and those routes are covered by local tests; the swaps above were run from the CLI.
 
 A forked-mainnet execution has **not** been demonstrated: a Hardhat 3 fork of `https://mainnet.hashio.io/api` loaded the mainnet router bytecode, but calls failed because the fork lacked Hedera's hardfork history, and the Hedera forking plugin declares a Hardhat 2 peer dependency.
 

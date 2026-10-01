@@ -4,7 +4,7 @@ export type Fetcher = typeof fetch;
 export interface MirrorKey { _type: string; key: string }
 export interface MirrorAccount { account:string; evm_address:string; deleted:boolean; key:MirrorKey; balance:{balance:number;tokens:{token_id:string;balance:number}[]} }
 export interface MirrorTransfer { token_id:string; account:string; amount:number|string }
-export interface MirrorTransaction { transaction_id:string; result:string; consensus_timestamp:string; token_transfers:MirrorTransfer[]; nonce?:number; name?:string; entity_id?:string }
+export interface MirrorTransaction { transaction_id:string; result:string; consensus_timestamp:string; token_transfers:MirrorTransfer[]; nonce?:number; name?:string; entity_id?:string; scheduled?:boolean }
 export function mirrorTxId(value: string) {
   if (/^0\.0\.\d+-\d+-\d{9}$/.test(value)) return value;
   const m = /^(0\.0\.\d+)@(\d+)\.(\d{1,9})$/.exec(value);
@@ -60,18 +60,21 @@ export class Mirror {
     }
     return events.sort((a,b)=>a.sequence-b.sequence);
   }
-  async transaction(id:string) {
+  /** A scheduled transaction shares its ID with the ScheduleCreate that carried it; `scheduled` picks it. */
+  async transaction(id:string, scheduled=false) {
     const txId = mirrorTxId(id);
-    const data = await this.json<{transactions:MirrorTransaction[]}>(`/api/v1/transactions/${txId}`);
-    const tx = data.transactions.find(t=>t.transaction_id===txId && (t.nonce??0)===0 && t.result!=='DUPLICATE_TRANSACTION');
+    const data = await this.json<{transactions:MirrorTransaction[]}>(`/api/v1/transactions/${txId}${scheduled?'?scheduled=true':''}`);
+    const tx = data.transactions.find(t=>t.transaction_id===txId && (t.nonce??0)===0 && !!t.scheduled===scheduled && t.result!=='DUPLICATE_TRANSACTION');
     if(!tx) throw new AppError('SETTLEMENT_UNCONFIRMED');
     return tx;
   }
   /** HTS transfers made by a contract call appear in child transaction nonces. */
-  async contractTransfers(id:string) {
+  async contractTransfers(id:string, scheduled=false) {
     const txId=mirrorTxId(id);
+    // ?scheduled=true omits child records, so read every row; a scheduled call's children carry
+    // scheduled=false and only the ScheduleCreate itself (nonce 0, not scheduled) is excluded.
     const data=await this.json<{transactions:MirrorTransaction[]}>(`/api/v1/transactions/${txId}`);
-    const rows=data.transactions.filter(t=>t.transaction_id===txId && t.result!=='DUPLICATE_TRANSACTION');
+    const rows=data.transactions.filter(t=>t.transaction_id===txId && t.result!=='DUPLICATE_TRANSACTION' && !(scheduled && (t.nonce??0)===0 && !t.scheduled));
     const parent=rows.find(t=>(t.nonce??0)===0);
     if(!parent || parent.result!=='SUCCESS' || parent.name!=='CONTRACTCALL') throw new AppError('CONTRACT_TRANSFER_UNCONFIRMED');
     if(rows.some(t=>t.result!=='SUCCESS')) throw new AppError('CONTRACT_CHILD_FAILED');
