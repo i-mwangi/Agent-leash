@@ -16,8 +16,8 @@ Accountable Agent gives an AI agent on Hedera testnet a 1-of-2 account it shares
 
 | Where | What lives there |
 | --- | --- |
-| `packages/agent/src/` | CLI (`cli.ts`), setup shared by CLI and browser (`setup.ts`), local runtime for browser setup and dashboard agent tasks (`service.ts`, `wizard.ts`), pre-signing policy check (`policyClient.ts`), spend, scheduled swaps (`schedule.ts`), vault, feedback, MCP (`mcp.ts`) |
-| `packages/server/src/` | Hono API: modes (`index.ts`), routes (`app.ts`), live sources (`live.ts`), x402 settlement (`x402.ts`) |
+| `packages/agent/src/` | CLI (`cli.ts`), setup shared by CLI and browser (`setup.ts`), local runtime for browser setup and dashboard agent tasks (`service.ts`, `wizard.ts`), pre-signing policy check (`policyClient.ts`), spend, scheduled swaps (`schedule.ts`), x402 payments (`pay.ts`), vault, feedback, MCP (`mcp.ts`) |
+| `packages/server/src/` | Hono API: modes (`index.ts`), routes (`app.ts`), live sources (`live.ts`), x402 settlement (`x402.ts`), paid LLM inference (`inference.ts`) |
 | `packages/shared/src/` | Mirror client, `readFacts` identity verification (`sources.ts`), agent lookup and reputation (`resolve.ts`), read-only mainnet venue prices (`venues.ts`), agreement and standing formats, UAID, vault terms |
 | `packages/contracts/contracts/` | `PolicyRegistry.sol` (client-enforced policy) and `GuardedHbarVault.sol` (contract-enforced HBAR) with Solidity tests |
 | `packages/nextjs/app/` | Dashboard; `setup-wizard.tsx` (browser setup), `guardian-wallet.tsx` (HashPack actions), `agent-lookup.tsx` |
@@ -39,6 +39,7 @@ The API refuses to start with spend keys in its environment. The agent runtime l
 - **Setup steps**: `setup.ts` serves both the CLI and browser setup; `wizard.ts` decides which wallet step the browser shows next. Every on-chain write goes through `nativeOperation`, which records the transaction before sending so a retry never duplicates it. Keep that.
 - **Spending rules**: `policyClient.ts` is a pure function with its own tests. The agent must run it against fresh mirror reads immediately before signing.
 - **Scheduled swaps**: `schedule.ts` checks the policy before signing the `ScheduleCreate`; Hedera does not check it at execution. Keep the reservation until the outcome is recorded, the guardian as an admin key, the runtime's cancel-on-refusal check, and reads with `scheduled=true` for the executed transaction (its child transfers come from the unfiltered rows).
+- **x402 payments**: `pay.ts` must check the policy for USDC immediately before signing, inspect the signed transfer, reserve before sending, and let the mirror decide whether money moved. Sellers use `Payments` in `x402.ts`; paid work that can fail runs with `prepareFirst` so a buyer is never charged for it. Never return a mock 402, and never log or return the inference provider key or its error bodies.
 - **Venue prices**: `venues.ts` is read-only mainnet data. Never sign or submit on mainnet, and report a venue that fails rather than estimating it.
 - **Standing report fields**: `packages/shared/src/standing.ts`. Add a new signed version rather than changing an existing one; the version 1–3 tests are pinned.
 - **Verifying agents**: change `readFacts` in `sources.ts`; it backs standing, the dashboard and `resolveAgent`, so all of them stay consistent.
@@ -55,6 +56,8 @@ The API refuses to start with spend keys in its environment. The agent runtime l
 | `give_feedback` | Rate an agent you actually dealt with, 0–100. Never rate your own agent; the tool refuses |
 | `record_outcome` | Publish a verified swap result to the agent's HCS topic |
 | `link_account` | Verify and bind the agent account and its keys |
+| `service_price` | Read what an x402 service charges, without paying |
+| `pay_service` | Pay an x402 service in USDC under the policy. Always state `maxAmount`; pass `sellerAgentId` when you know the seller, and treat a refusal as final |
 
 A paused policy or a revoked agent key means stop. Do not look for a way around it.
 

@@ -1088,3 +1088,40 @@ button.link {
     grid-template-columns: 1fr;
   }
 }
+
+.pay-form {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+  margin: 12px 0;
+}
+.pay-form label {
+  margin: 0;
+  display: grid;
+  gap: 6px;
+}
+.pay-form textarea {
+  border: 1px solid #dce3d6;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 14px;
+  color: #32482f;
+  resize: vertical;
+}
+.pay-actions {
+  display: flex;
+  gap: 10px;
+}
+.pay-actions .primary {
+  width: auto;
+}
+.service-answer {
+  margin: 12px 0;
+  padding: 12px 16px;
+  border-left: 3px solid #92b477;
+  background: #f6f8f2;
+  white-space: pre-wrap;
+  font-size: 14px;
+  overflow-x: auto;
+}

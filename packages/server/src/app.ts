@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { checkPolicy, type PolicySnapshot } from "../../agent/src/policyClient";
 import type { LiveServices } from './live';
-import { AppError, uint, jsonSafe } from '../../shared/src/model';
+import { AppError, USDC, uint, jsonSafe } from '../../shared/src/model';
 import { readDeployment } from '../../shared/src/files';
-import { fallbackQuote, quote, policySnapshot } from '../../shared/src/sources';
+import { POLICY_ABI, fallbackQuote, quote, policySnapshot } from '../../shared/src/sources';
 import { recentRegistrations, resolveAgent } from '../../shared/src/resolve';
-import { recentFills } from '../../shared/src/fills';
+import { recentFills, recentIncome, recentPayments } from '../../shared/src/fills';
 import { compareVenues } from '../../shared/src/venues';
+import { complete, inferenceRequest } from './inference';
 import type { ConsensusEvent } from '../../shared/src/model';
 import { Mirror } from '../../shared/src/mirror';
 
@@ -118,6 +119,14 @@ export function createApp(modeInput:string|(()=>string) = "demo", services:()=>L
     const parsed=uint.safeParse(c.req.query('amount')); if(!parsed.success) throw new AppError('INVALID_AMOUNT',400);
     return c.json(await fallbackQuote(live.deployment,live.mirror,BigInt(parsed.data)));
   });
+  // x402 payments the agent made, and USDC it received, for example for its paid inference.
+  app.get('/agent/payments',async c=>{
+    const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
+    const facts=await live.ready(live.deployment.agentAccount??'') as {events:ConsensusEvent[]};
+    const [token,allowed,balance]=await Promise.all([live.mirror.token(USDC),live.mirror.call(live.deployment.policyAddress!,POLICY_ABI,'allowedTokens',[USDC]),live.mirror.balance(live.deployment.agentAccount!,USDC).catch(()=>null)]);
+    return c.json({token:{id:token.token_id,symbol:token.symbol,decimals:Number(token.decimals)},usdcAllowed:allowed[0]===true,balance:balance?.toString()??null,policyContractId:live.deployment.policyContractId,paid:recentPayments(live.deployment,facts.events),received:await recentIncome(live.deployment.agentAccount!,live.mirror),
+      selling:live.inference?{endpoint:`${live.deployment.standingBaseUrl}/paid/inference`,model:live.inference.model,price:live.inference.price}:null});
+  });
   // Public mainnet market data from SaucerSwap and Lambdaplex; read-only and independent of setup.
   app.get('/dex/venues',async c=>{
     const parsed=uint.safeParse(c.req.query('amount')); if(!parsed.success) throw new AppError('INVALID_AMOUNT',400);
@@ -139,6 +148,26 @@ export function createApp(modeInput:string|(()=>string) = "demo", services:()=>L
   app.get('/.well-known/agent-card.json',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');
     const facts=await live.ready(live.deployment.agentAccount??'') as {card:unknown};return c.json(jsonSafe(facts.card));
+  });
+  // Paid LLM inference sold by this agent over x402. Unconfigured, it stays an unpaid 503.
+  app.get('/paid/inference',c=>{
+    const live=services(),config=live?.inference;
+    if(!live || !config) throw new AppError('INFERENCE_NOT_CONFIGURED');
+    return c.json({service:'LLM completion',method:'POST',body:{prompt:'string'},model:config.model,price:config.price,asset:USDC,network:'hedera:testnet',payTo:live.deployment.agentAccount,erc8004AgentId:live.deployment.erc8004AgentId});
+  });
+  app.post('/paid/inference',async c=>{
+    const live=services(),config=live?.inference;
+    if(!live || !config) throw new AppError('INFERENCE_NOT_CONFIGURED');
+    const parsed=inferenceRequest.safeParse(await c.req.json().catch(()=>null));
+    if(!parsed.success) throw new AppError('INVALID_PROMPT',400);
+    const requirements=await live.payments.requirements(config.price);
+    const header=c.req.header('PAYMENT-SIGNATURE');
+    if(!header) {
+      const challenge=live.payments.challenge(requirements,`${live.deployment.standingBaseUrl}/paid/inference`,`One LLM completion (${config.model})`);
+      c.header('PAYMENT-REQUIRED',challenge.header);return c.json(challenge.body,402);
+    }
+    const result=await live.payments.accept(header,requirements,'inference',()=>complete(config,parsed.data.prompt),{prepareFirst:true});
+    c.header('PAYMENT-RESPONSE',result.responseHeader);return c.json(jsonSafe(result.body));
   });
   app.get('/standing/:id',async c=>{
     const live=services();if(!live) throw new AppError('SOURCES_NOT_CONFIGURED');

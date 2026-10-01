@@ -1,4 +1,4 @@
-import { setup, register, guardianAction, initialize, adoptExisting, configureDex, fundDex, fundAgent, setStandingUrl } from './setup';
+import { setup, register, guardianAction, initialize, adoptExisting, configureDex, fundDex, fundAgent, fundUsdc, allowToken, setStandingUrl } from './setup';
 import { reconcilePause } from './reconcile';
 import { readDeployment, DATA, atomicJson } from '../../shared/src/files';
 import { compileVaultTerms, vaultTermsHash } from '../../shared/src/vaultTerms';
@@ -6,6 +6,7 @@ import { approveVaultTerms, deployVault, vaultStatus, allowVaultRecipients, guar
 import { Mirror } from '../../shared/src/mirror';
 import { fallbackQuote, readFacts, quote } from '../../shared/src/sources';
 import { spend } from './spend';
+import { payService, priceOf, type ServiceRequest } from './pay';
 import { cancelSchedule, listSchedules, reconcileSchedules, scheduleSwap } from './schedule';
 import { payStanding } from './payment';
 import { startMcp } from './mcp';
@@ -49,9 +50,24 @@ async function main(){
   if(command==='reconcile-pause') {if(!args[0]) throw new AppError('TRANSACTION_ID_REQUIRED',400);return reconcilePause(args[0]);}
   if(command==='configure-dex') return configureDex();
   if(command==='fund-dex') return fundDex(BigInt(uint.parse(args[0])));
+  if(command==='fund-usdc') return fundUsdc(BigInt(uint.parse(args[0])),args[1]);
   if(command==='fund-agent') return fundAgent(BigInt(uint.parse(args[0])),args[1]);
   if(command==='caps') return guardianAction('caps',[BigInt(uint.parse(args[0])),BigInt(uint.parse(args[1]))]);
   if(command==='evidence') return JSON.parse(readFileSync(resolve(DATA,'evidence.json'),'utf8'));
+  if(command==='allow-token' || command==='disallow-token') {if(!args[0]) throw new AppError('TOKEN_REQUIRED',400);return allowToken(args[0],command==='allow-token');}
+  if(command==='price' || command==='pay') {
+    // pay URL [--prompt TEXT | --body JSON] [--max UNITS] [--seller AGENT_ID]
+    const flag=(name:string)=>{const i=args.indexOf(`--${name}`);return i>0?args[i+1]:undefined;};
+    if(!args[0] || args[0].startsWith('--')) throw new AppError('SERVICE_URL_REQUIRED',400);
+    const prompt=flag('prompt'),body=flag('body'),max=flag('max'),seller=flag('seller');
+    let parsedBody:unknown;
+    if(prompt!==undefined) parsedBody={prompt};
+    else if(body!==undefined) {try{parsedBody=JSON.parse(body);}catch{throw new AppError('INVALID_BODY_JSON',400);}}
+    const request:ServiceRequest={url:args[0],body:parsedBody,maxAmount:max===undefined?undefined:BigInt(uint.parse(max)),sellerAgentId:seller===undefined?undefined:BigInt(uint.parse(seller))};
+    if(command==='price') return priceOf(request);
+    if(request.maxAmount===undefined) throw new AppError('MAX_AMOUNT_REQUIRED',400);
+    return payService(request);
+  }
   if(command==='set-standing-url') return setStandingUrl(args[0]??'');
   if(command==='lookup') return resolveAgent(feedbackInput(args[0]??'','0').agentId);
   if(command==='give-feedback') return giveFeedback(args[0]??'',args[1]??'',args[2]);
@@ -64,7 +80,7 @@ async function main(){
   if(command==='schedule-swap') {if(!args[1]) throw new AppError('EXECUTE_AT_REQUIRED',400);return scheduleSwap(BigInt(uint.parse(args[0])),args[1]);}
   if(command==='schedules') {await reconcileSchedules();return listSchedules();}
   if(command==='cancel-schedule') return cancelSchedule(args[0]??'');
-  throw new AppError('USAGE: set-standing-url HTTPS_URL | lookup AGENT_ID | give-feedback AGENT_ID SCORE [TAG] | onboard | draft-agreement | approve-agreement | draft-vault-terms FILE | approve-vault-terms | deploy-vault | vault-status | allow-vault-recipients | fund-vault TINYBARS | vault-spend RECIPIENT TINYBARS | vault-pause | vault-unpause | vault-revoke | vault-recover | init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | schedule-swap AMOUNT ISO_TIME | schedules | cancel-schedule SCHEDULE_ID | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | fund-agent TINYBARS [ACCOUNT] | evidence',400);
+  throw new AppError('USAGE: set-standing-url HTTPS_URL | lookup AGENT_ID | give-feedback AGENT_ID SCORE [TAG] | onboard | draft-agreement | approve-agreement | draft-vault-terms FILE | approve-vault-terms | deploy-vault | vault-status | allow-vault-recipients | fund-vault TINYBARS | vault-spend RECIPIENT TINYBARS | vault-pause | vault-unpause | vault-revoke | vault-recover | init | adopt PUBLIC_DEPLOYMENT_JSON | setup | register | status | pay-standing | quote AMOUNT | quote-fallback AMOUNT | spend AMOUNT | schedule-swap AMOUNT ISO_TIME | schedules | cancel-schedule SCHEDULE_ID | pause | reconcile-pause TXID | unpause | caps TX DAY | revoke | restore | configure-dex | fund-dex TINYBARS | fund-agent TINYBARS [ACCOUNT] | fund-usdc UNITS [ACCOUNT] | allow-token TOKEN | disallow-token TOKEN | price URL [--prompt TEXT] | pay URL --max UNITS [--prompt TEXT | --body JSON] [--seller AGENT_ID] | evidence',400);
 }
 if(command==='mcp') startMcp().catch(()=>{console.error('MCP_START_FAILED');process.exitCode=1;});
 else main().then(result=>console.log(JSON.stringify(jsonSafe(result),null,2))).catch(error=>{console.error(error instanceof AppError?error.code:error instanceof Error?error.message:'COMMAND_FAILED');process.exitCode=1;});

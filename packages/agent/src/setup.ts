@@ -172,6 +172,33 @@ export async function guardianAction(action:'pause'|'unpause'|'revoke'|'restore'
     await publish(d,action==='caps'?'policy':action==='pause'?'paused':'unpaused',{address:d.policyAddress,transactionId:result.txId},'guardian',name+'-hcs',store);return result;
   });}finally{client.close();store.close();}
 }
+/** Send operator testnet USDC (six decimals) to this deployment's agent or another associated agent account. */
+export async function fundUsdc(units:bigint,account?:string) {
+  if(units<=0n || units>10_000_000n) throw new AppError('FUND_AMOUNT_OUT_OF_RANGE',400);
+  const d=readDeployment();if(!d) throw new AppError('SETUP_REQUIRED');
+  const target=account?entityId.parse(account):d.agentAccount;if(!target || target===d.operatorId) throw new AppError('FUND_TARGET_INVALID',400);
+  const mirror=new Mirror();
+  await mirror.balance(target,USDC); // throws TOKEN_NOT_ASSOCIATED before anything is signed
+  if(await mirror.balance(d.operatorId,USDC)<units) throw new AppError('PAYER_USDC_INSUFFICIENT');
+  const client=clientFor(d.operatorId,roleKey('operator'));const store=new Store(resolve(DATA,'operator.sqlite'));
+  try {return await store.exclusive('fund-usdc',async()=>{
+    const result=await nativeOperation(`fund-usdc-${units}-${Date.now()}`,new TransferTransaction().addTokenTransfer(USDC,d.operatorId,-units).addTokenTransfer(USDC,target,units),client,store);
+    return {transactionId:result.txId,account:target,sentUnits:units.toString(),usdcUnits:(await mirror.balance(target,USDC)).toString()};
+  });}finally{client.close();store.close();}
+}
+/** Guardian: allow or disallow a token in the policy contract, recorded on the agent's HCS topic. */
+export async function allowToken(token:string,allowed=true) {
+  const asset=entityId.parse(token);
+  const d=readDeployment();if(!d?.agentAccount || !d.guardianId || !d.policyContractId) throw new AppError('SETUP_REQUIRED');
+  const key=roleKey('guardian');if(key.publicKey.toStringRaw()!==d.guardianPublicKey) throw new AppError('GUARDIAN_KEY_MISMATCH');
+  const info=await new Mirror().token(asset);if(info.deleted) throw new AppError('TOKEN_DELETED',400);
+  const client=clientFor(d.guardianId,key);const store=new Store(resolve(DATA,'guardian.sqlite'));const name=`allow-${asset}-${allowed}-${Date.now()}`;
+  try{return await store.exclusive('guardian-action',async()=>{
+    const result=await nativeOperation(name,new ContractExecuteTransaction().setContractId(d.policyContractId!).setGas(300000).setFunctionParameters(getBytes(POLICY_ABI.encodeFunctionData('setAllowedTokens',[[asset],allowed]))),client,store);
+    await publish(d,'policy',{address:d.policyAddress,token:asset,allowed,transactionId:result.txId},'guardian',name+'-hcs',store);
+    return {...result,token:asset,symbol:info.symbol,allowed};
+  });}finally{client.close();store.close();}
+}
 /** Switch a previously deployed template to the verified testnet V1 SAUCE/WHBAR pool. */
 export async function configureDex() {
   const d=readDeployment();if(!d?.agentAccount || !d.guardianId || !d.policyContractId) throw new AppError('SETUP_REQUIRED');

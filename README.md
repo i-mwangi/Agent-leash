@@ -19,6 +19,7 @@ Anyone can hand an AI agent a wallet. Nothing about that wallet makes the agent 
 - **Verifiable identity** — HCS profile topic, HCS-14 UAID and ERC-8004 registration on Hedera testnet
 - **Guardian-approved terms** — the agreement hash is published to HCS and bound into every standing report
 - **Paid standing** — `GET /standing/:id` sells an EIP-712 signed report over x402 (USDC via Blocky402, settlement confirmed on the mirror)
+- **Pay for services over x402** — the agent pays any HTTP service that charges in USDC on Hedera, such as an LLM API, within the guardian's limits, from the dashboard, the CLI or an AI assistant over MCP; and it can sell paid LLM inference itself
 - **Agent lookup and reputation** — verify any other agent by its ERC-8004 ID before dealing with it, and rate agents you dealt with in the ERC-8004 reputation registry on Hedera
 - **Contract-enforced vault (optional)** — caps, recipient allowlist, pause and recovery that hold even if the agent bypasses its client
 - **Guardian wallet controls** — pause, unpause and vault recovery from HashPack in the dashboard
@@ -162,16 +163,16 @@ flowchart LR
 
 Each integration carries part of the template's job. Removing any of the first four removes a capability, not a feature flag.
 
-| Integration                      | What it does here                                                                                                                                                   | Why the template needs it                                                                                                                                      | Live evidence                                                                                                                                                                |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **x402 + Blocky402**             | Sells the signed standing report: `402 Payment Required`, Blocky402 verifies and settles 0.001 USDC, the API confirms the exact transfer on the mirror              | Standing is how a counterparty checks the agent before trusting it; x402 makes that check payable by another agent over plain HTTP, with no account or API key | [Paid standing](#cli-deployment-2527-september-2026), [version 2](#cli-deployment-2527-september-2026) and [version 3](#vaults) reports                                      |
-| **ERC-8004 identity registry**   | Registers each agent; its card names the account, guardian, HCS topic, UAID, policy and standing endpoint; lookups verify any agent from it                         | The shared directory where other agents find this one and see who answers for it                                                                               | Agents [121](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [125](https://hashscan.io/testnet/transaction/0.0.10798471%401790805543.885864012) |
-| **ERC-8004 reputation registry** | Agents rate agents they dealt with; every lookup lists the reviews with their reviewers                                                                             | Turns individual checks into a shared track record; the registry blocks owners from rating their own agent                                                     | [First review](#agent-to-agent-lookup-and-review)                                                                                                                            |
-| **HashPack (WalletConnect)**     | The guardian approves setup and signs pause, unpause and vault controls; the guardian key never leaves the wallet                                                   | Puts a human in control without the template ever holding the guardian's key                                                                                   | [HashPack setup run](#browser-setup), [vault controls](#vaults)                                                                                                              |
-| **SaucerSwap V1**                | The agent's example spend: a policy-checked SAUCE → WHBAR swap on testnet, now or scheduled, started from the dashboard or CLI; mainnet quotes for price comparison | Shows the policy check guarding a real DeFi action, not a mock transfer                                                                                        | [Policy-checked swap](#saucerswap), [scheduled swap](#scheduled-swaps-and-venue-prices)                                                                                      |
-| **Hedera Schedule Service**      | A scheduled swap is signed now and executed by Hedera at the chosen time; the guardian and the agent are both admin keys and can delete it                          | Lets a guardian direct the agent to act later without a process staying up to sign; revoking the agent key stops it at execution                               | [Scheduled, cancelled and revoked schedules](#scheduled-swaps-and-venue-prices)                                                                                              |
-| **Lambdaplex**                   | Read-only HBAR/USDC order book from its public API, compared with SaucerSwap for the same amount, including how much the book can fill                              | Price discovery across Hedera venues before the agent trades. Lambdaplex settles on mainnet only, so the agent compares it and does not trade there            | [Venue comparison](#scheduled-swaps-and-venue-prices)                                                                                                                        |
-| **HCS-14 UAID**                  | A standards-derived identifier published to the agent's topic and its card                                                                                          | Gives the agent one portable ID other HCS tools can resolve                                                                                                    | [UAID message](https://hashscan.io/testnet/transaction/0.0.5792828%401790349056.243185055)                                                                                   |
+| Integration                      | What it does here                                                                                                                                                                                                                | Why the template needs it                                                                                                                                      | Live evidence                                                                                                                                                                             |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **x402 + Blocky402**             | Sells the signed standing report and paid LLM inference, and lets the agent pay any x402 service in USDC under its policy; Blocky402 verifies, settles and pays the fee, and both sides confirm the exact transfer on the mirror | Standing is how a counterparty checks the agent before trusting it; x402 makes that check payable by another agent over plain HTTP, with no account or API key | [Paid standing](#cli-deployment-2527-september-2026), [version 2](#cli-deployment-2527-september-2026) and [version 3](#vaults) reports; [agent-to-agent payment](#x402-service-payments) |
+| **ERC-8004 identity registry**   | Registers each agent; its card names the account, guardian, HCS topic, UAID, policy and standing endpoint; lookups verify any agent from it                                                                                      | The shared directory where other agents find this one and see who answers for it                                                                               | Agents [121](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [125](https://hashscan.io/testnet/transaction/0.0.10798471%401790805543.885864012)              |
+| **ERC-8004 reputation registry** | Agents rate agents they dealt with; every lookup lists the reviews with their reviewers                                                                                                                                          | Turns individual checks into a shared track record; the registry blocks owners from rating their own agent                                                     | [First review](#agent-to-agent-lookup-and-review)                                                                                                                                         |
+| **HashPack (WalletConnect)**     | The guardian approves setup and signs pause, unpause and vault controls; the guardian key never leaves the wallet                                                                                                                | Puts a human in control without the template ever holding the guardian's key                                                                                   | [HashPack setup run](#browser-setup), [vault controls](#vaults)                                                                                                                           |
+| **SaucerSwap V1**                | The agent's example spend: a policy-checked SAUCE → WHBAR swap on testnet, now or scheduled, started from the dashboard or CLI; mainnet quotes for price comparison                                                              | Shows the policy check guarding a real DeFi action, not a mock transfer                                                                                        | [Policy-checked swap](#saucerswap), [scheduled swap](#scheduled-swaps-and-venue-prices)                                                                                                   |
+| **Hedera Schedule Service**      | A scheduled swap is signed now and executed by Hedera at the chosen time; the guardian and the agent are both admin keys and can delete it                                                                                       | Lets a guardian direct the agent to act later without a process staying up to sign; revoking the agent key stops it at execution                               | [Scheduled, cancelled and revoked schedules](#scheduled-swaps-and-venue-prices)                                                                                                           |
+| **Lambdaplex**                   | Read-only HBAR/USDC order book from its public API, compared with SaucerSwap for the same amount, including how much the book can fill                                                                                           | Price discovery across Hedera venues before the agent trades. Lambdaplex settles on mainnet only, so the agent compares it and does not trade there            | [Venue comparison](#scheduled-swaps-and-venue-prices)                                                                                                                                     |
+| **HCS-14 UAID**                  | A standards-derived identifier published to the agent's topic and its card                                                                                                                                                       | Gives the agent one portable ID other HCS tools can resolve                                                                                                    | [UAID message](https://hashscan.io/testnet/transaction/0.0.5792828%401790349056.243185055)                                                                                                |
 
 Hedera services used: **native accounts** with a 1-of-2 `KeyList` (agent and guardian) and guardian key rotation; **HCS** for the identity, policy, agreement, guardian-action and fill records; **HTS** for USDC and SAUCE; **smart contracts** (`PolicyRegistry`, `GuardedHbarVault`, the ERC-8004 registries, the SaucerSwap router); the **Schedule Service** for swaps executed later; and the **mirror node** as the source of truth for every check.
 
@@ -243,6 +244,33 @@ sequenceDiagram
 - Reports expire after two minutes and are short-lived mirror observations, not guarantees about future state. Payments have replay protection.
 - HCS reads enforce publisher authority: forged or malformed agent messages cannot replace guardian or operator identity records. Malformed authoritative records and unavailable mirror pages fail closed, and agent fill records are independently verified before they count toward daily spend.
 - This service cannot enforce an arbitrary buyer's own spend cap, pause or guardian controls; buyers need their own wallet policy.
+
+### Pay for services over x402
+
+x402 lets an HTTP service charge per request: it answers `402 Payment Required` with a price, the caller pays, and the service answers. The agent can pay any service that accepts USDC on Hedera testnet, for example an LLM API, a data feed or another agent's standing report. Use the dashboard's **Pay services** page, the CLI or the MCP tool `pay_service`:
+
+```sh
+npm run agent -- allow-token 0.0.429274
+npm run agent -- price https://seller.example/paid/inference --prompt "Hello"
+npm run agent -- pay https://seller.example/paid/inference --prompt "Hello" --max 50000 --seller 125
+```
+
+- **Under the guardian's policy.** The guardian first allows USDC in the policy contract (`allow-token`, or **Allow USDC payments** in HashPack for a browser setup). Every payment then passes the same check as a swap, immediately before signing: pause, agent key, allowed token, per-payment cap, daily cap and balance. Each token's daily spend is counted separately against the same caps; USDC and SAUCE both have six decimals.
+- **Paid by the agent key.** The agent refuses any option other than exact USDC on `hedera:testnet`, any price above `--max`, and payment to itself. Before sending, it checks the signed transfer moves exactly the price from the agent to the seller. With `--seller AGENT_ID` it also requires the seller to verify as that ERC-8004 agent and be paid at that agent's account.
+- **Confirmed and recorded.** The amount is reserved before the payment is sent. The mirror, not the service's reply, decides whether money moved. A confirmed payment is recorded on the agent's HCS topic as a `fill` with `kind: "x402"`. If the seller never submits the payment, it is released after Hedera's 180-second validity window.
+- **No extra HBAR.** Blocky402 is the fee payer for Hedera x402 payments, so the agent needs USDC but no HBAR for them. `fund-usdc 1000000` sends 1 testnet USDC from the operator; the agent must be associated with USDC, which setup does.
+- **Where to find services.** Few public x402 services accept Hedera yet. Most listings in Coinbase's x402 directory use Base or Solana. This template's own endpoints (standing and paid inference) give other agents something to buy now.
+
+**Sell paid LLM inference.** Add an OpenAI-compatible provider to `.env.server` and restart `npm run dev`:
+
+```sh
+INFERENCE_BASE_URL=https://api.openai.com/v1
+INFERENCE_API_KEY=your-provider-key
+INFERENCE_MODEL=gpt-4o-mini
+INFERENCE_PRICE=10000
+```
+
+`POST /paid/inference` with `{"prompt": "..."}` then charges `INFERENCE_PRICE` USDC (default 10000 = 0.01 USDC) to the agent's account. Other providers work the same way, for example Anthropic (`https://api.anthropic.com/v1`), Groq (`https://api.groq.com/openai/v1`) or OpenRouter (`https://openrouter.ai/api/v1`). The model runs only after the buyer's payment signature is verified, and the payment is settled only after the model answers, so a failed request is never charged. The provider key stays in `.env.server` and is never logged or returned; provider error bodies are not passed on. Without the three variables the endpoint answers an unpaid 503. The **Pay services** page shows the endpoint and the USDC the agent received.
 
 ### Optional HBAR vault
 
@@ -325,7 +353,7 @@ The agent signs the review with its own key: an integer score from 0 to 100, a s
 
 ### MCP server
 
-`npm run agent -- mcp` starts a local stdio MCP server with `link_account`, `check_policy`, `record_outcome`, `resolve_agent` and `give_feedback`. Run it in the project directory with the agent key file present. `link_account` verifies the account and stores a local ignored binding; `check_policy` is advisory; `record_outcome` checks mirror evidence before writing an HCS fill; `resolve_agent` lets the agent check another agent before dealing with it; `give_feedback` rates another agent, signed by this one.
+`npm run agent -- mcp` starts a local stdio MCP server with `link_account`, `check_policy`, `record_outcome`, `resolve_agent`, `give_feedback`, `service_price` and `pay_service`. Run it in the project directory with the agent key file present. `link_account` verifies the account and stores a local ignored binding; `check_policy` is advisory; `record_outcome` checks mirror evidence before writing an HCS fill; `resolve_agent` lets the agent check another agent before dealing with it; `give_feedback` rates another agent, signed by this one; `service_price` reads an x402 price without paying; `pay_service` pays an x402 service under the policy, up to a `maxAmount` the assistant must state.
 
 ---
 
@@ -349,44 +377,47 @@ npm run agent -- pay-standing
 
 Run as `npm run agent -- <command>`.
 
-| Command                                                            | Description                                                                        |
-| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| `onboard`                                                          | Resumable CLI setup: accounts, topic, UAID, policy, registration, draft            |
-| `draft-agreement` / `approve-agreement`                            | Write the agreement draft / sign and publish it with the local guardian key        |
-| `status`                                                           | Cross-check account key, HCS events, registry card and policy on the mirror        |
-| `pay-standing`                                                     | Pay 0.001 USDC for standing and verify the signed report                           |
-| `pause` / `unpause` / `revoke` / `restore`                         | Guardian actions with the local guardian key                                       |
-| `caps TX DAY`                                                      | Set new policy caps (requires a new agreement approval)                            |
-| `reconcile-pause TXID`                                             | Record the missing HCS event for a confirmed browser pause                         |
-| `draft-vault-terms FILE` / `approve-vault-terms` / `deploy-vault`  | Compile, approve and deploy vault terms                                            |
-| `vault-status` / `allow-vault-recipients`                          | Verify the vault and its installed recipient list                                  |
-| `fund-vault TINYBARS` / `vault-spend RECIPIENT TINYBARS`           | Fund the vault / spend from it as the agent                                        |
-| `vault-pause` / `vault-unpause` / `vault-revoke` / `vault-recover` | Guardian vault controls                                                            |
-| `quote AMOUNT` / `quote-fallback AMOUNT`                           | Read-only SaucerSwap quotes                                                        |
-| `fund-dex TINYBARS` / `spend AMOUNT` / `configure-dex`             | DEX funding, policy-checked swap, route update                                     |
-| `schedule-swap AMOUNT ISO_TIME`                                    | Policy-checked swap that Hedera executes at the given time                         |
-| `fund-agent TINYBARS [ACCOUNT]`                                    | Send setup-account HBAR for network fees to the agent, or to another agent account |
-| `schedules` / `cancel-schedule SCHEDULE_ID`                        | Record scheduled-swap outcomes and list them / delete a pending one                |
-| `init` / `setup` / `register` / `adopt PUBLIC_DEPLOYMENT_JSON`     | Individual setup steps and reattaching an existing deployment                      |
-| `set-standing-url HTTPS_URL`                                       | Publish a reachable standing base URL in the agent's ERC-8004 card                 |
-| `lookup AGENT_ID`                                                  | Verify any agent by ERC-8004 ID and list its reviews (read-only)                   |
-| `give-feedback AGENT_ID SCORE [TAG]`                               | Rate another agent 0–100 in the ERC-8004 reputation registry                       |
-| `evidence`                                                         | Print the recorded testnet transaction links                                       |
-| `mcp`                                                              | Start the local stdio MCP server                                                   |
+| Command                                                                                | Description                                                                        |
+| -------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `onboard`                                                                              | Resumable CLI setup: accounts, topic, UAID, policy, registration, draft            |
+| `draft-agreement` / `approve-agreement`                                                | Write the agreement draft / sign and publish it with the local guardian key        |
+| `status`                                                                               | Cross-check account key, HCS events, registry card and policy on the mirror        |
+| `pay-standing`                                                                         | Pay 0.001 USDC for standing and verify the signed report                           |
+| `pause` / `unpause` / `revoke` / `restore`                                             | Guardian actions with the local guardian key                                       |
+| `caps TX DAY`                                                                          | Set new policy caps (requires a new agreement approval)                            |
+| `reconcile-pause TXID`                                                                 | Record the missing HCS event for a confirmed browser pause                         |
+| `draft-vault-terms FILE` / `approve-vault-terms` / `deploy-vault`                      | Compile, approve and deploy vault terms                                            |
+| `vault-status` / `allow-vault-recipients`                                              | Verify the vault and its installed recipient list                                  |
+| `fund-vault TINYBARS` / `vault-spend RECIPIENT TINYBARS`                               | Fund the vault / spend from it as the agent                                        |
+| `vault-pause` / `vault-unpause` / `vault-revoke` / `vault-recover`                     | Guardian vault controls                                                            |
+| `quote AMOUNT` / `quote-fallback AMOUNT`                                               | Read-only SaucerSwap quotes                                                        |
+| `fund-dex TINYBARS` / `spend AMOUNT` / `configure-dex`                                 | DEX funding, policy-checked swap, route update                                     |
+| `allow-token TOKEN` / `disallow-token TOKEN`                                           | Guardian: allow or remove a token in the policy, recorded on HCS                   |
+| `price URL` / `pay URL --max UNITS [--prompt TEXT \| --body JSON] [--seller AGENT_ID]` | Read an x402 price / pay an x402 service under the policy                          |
+| `fund-usdc UNITS [ACCOUNT]`                                                            | Send operator testnet USDC to the agent or another agent account                   |
+| `schedule-swap AMOUNT ISO_TIME`                                                        | Policy-checked swap that Hedera executes at the given time                         |
+| `fund-agent TINYBARS [ACCOUNT]`                                                        | Send setup-account HBAR for network fees to the agent, or to another agent account |
+| `schedules` / `cancel-schedule SCHEDULE_ID`                                            | Record scheduled-swap outcomes and list them / delete a pending one                |
+| `init` / `setup` / `register` / `adopt PUBLIC_DEPLOYMENT_JSON`                         | Individual setup steps and reattaching an existing deployment                      |
+| `set-standing-url HTTPS_URL`                                                           | Publish a reachable standing base URL in the agent's ERC-8004 card                 |
+| `lookup AGENT_ID`                                                                      | Verify any agent by ERC-8004 ID and list its reviews (read-only)                   |
+| `give-feedback AGENT_ID SCORE [TAG]`                                                   | Rate another agent 0–100 in the ERC-8004 reputation registry                       |
+| `evidence`                                                                             | Print the recorded testnet transaction links                                       |
+| `mcp`                                                                                  | Start the local stdio MCP server                                                   |
 
 ---
 
 ## Configuration
 
-| File or variable                       | Purpose                                                                                                           |
-| -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `.env.operator`                        | Setup/operator key (generated by `npm run dev`); `HEDERA_OPERATOR_ID` is added once the account exists            |
-| `.env.agent`                           | Agent key, used only by the agent runtime and CLI                                                                 |
-| `.env.server`                          | Attestation key that signs standing reports; the API refuses spend keys                                           |
-| `.env.guardian`                        | Local guardian key, created only by CLI setup                                                                     |
-| `.accountable/`                        | Deployment record, drafts, operation stores and evidence log                                                      |
-| `APP_MODE`                             | API mode: `auto` (default: demo until the deployment verifies), `testnet` (strict: fail before serving) or `demo` |
-| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional override in `packages/nextjs/.env.local`                                                                 |
+| File or variable                       | Purpose                                                                                                               |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `.env.operator`                        | Setup/operator key (generated by `npm run dev`); `HEDERA_OPERATOR_ID` is added once the account exists                |
+| `.env.agent`                           | Agent key, used only by the agent runtime and CLI                                                                     |
+| `.env.server`                          | Attestation key that signs standing reports, and optional `INFERENCE_*` provider settings; the API refuses spend keys |
+| `.env.guardian`                        | Local guardian key, created only by CLI setup                                                                         |
+| `.accountable/`                        | Deployment record, drafts, operation stores and evidence log                                                          |
+| `APP_MODE`                             | API mode: `auto` (default: demo until the deployment verifies), `testnet` (strict: fail before serving) or `demo`     |
+| `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` | Optional override in `packages/nextjs/.env.local`                                                                     |
 
 All role files and `.accountable/` are ignored by git; keep them out of GitHub. To run the API alone in strict testnet mode: PowerShell `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`, Bash `APP_MODE=testnet npm run dev -w @accountable/server`. Strict mode verifies the account, HCS, registry, policy, facilitator support and payment token association, and fails before serving if a source is unavailable.
 
@@ -421,7 +452,7 @@ Tests are deterministic and need no funded accounts. The pinned raw-digest Heder
 agent-leash/
 ├── packages/
 │   ├── agent/        # CLI, local runtime (service.ts, wizard.ts), policy guard, vault, swaps and scheduled swaps, MCP
-│   ├── server/       # Hono API: x402 settlement, signed standing, auto/testnet/demo modes
+│   ├── server/       # Hono API: x402 settlement, signed standing, paid LLM inference, auto/testnet/demo modes
 │   ├── shared/       # Mirror and HCS readers, identity checks, UAID, agreement and vault verification, venue prices
 │   ├── contracts/    # PolicyRegistry (client-enforced policy) and GuardedHbarVault (contract-enforced HBAR)
 │   └── nextjs/       # Dashboard: demo, browser setup, live status, guardian wallet controls
@@ -534,6 +565,10 @@ On 1 October 2026 the CLI agent `121` (account `0.0.10715883`) used the new DEX 
 The dashboard's swap and schedule buttons call the same functions through the agent runtime, and those routes are covered by local tests; the swaps above were run from the CLI.
 
 A forked-mainnet execution has **not** been demonstrated: a Hardhat 3 fork of `https://mainnet.hashio.io/api` loaded the mainnet router bytecode, but calls failed because the fork lacked Hedera's hardfork history, and the Hedera forking plugin declares a Hardhat 2 peer dependency.
+
+### x402 service payments
+
+On 1 October 2026 the CLI agent `121` paid for a service sold by the browser-set-up agent `125`. The guardian [allowed USDC in `121`'s policy](https://hashscan.io/testnet/transaction/0.0.10715881%401790865461.097218817) and [recorded it on HCS](https://hashscan.io/testnet/transaction/0.0.10715881%401790865464.765415953), and the operator [sent the agent 1 USDC](https://hashscan.io/testnet/transaction/0.0.5792828%401790865476.869712944). `pay http://127.0.0.1:3001/standing/0.0.10798474 --max 5000 --seller 125` then read the 402 price (0.001 USDC to `0.0.10798474`), verified agent `125`, checked `121`'s policy and [paid with the agent key](https://hashscan.io/testnet/transaction/0.0.7162784%401790865514.672779373) (Blocky402 paid the fee). It confirmed the transfer on the mirror, received `125`'s signed standing report and [recorded the payment](https://hashscan.io/testnet/transaction/0.0.10715883%401790865521.492151984) as HCS message 24. The policy's USDC usage then read 0.001 for the day, separate from its 0.7 SAUCE of swaps. Both agents ran on the same computer, so the seller was reached at `127.0.0.1`.
 
 ### Local validation
 

@@ -121,6 +121,8 @@ describe('agent tasks from the dashboard',()=>{
       schedule:async(amount,at)=>{calls.push(`schedule:${amount}:${at}`);throw new Error('SCHEDULE_TOO_SOON');},
       cancel:async id=>{calls.push(`cancel:${id}`);return {};},
       schedules:()=>[],
+      pay:async()=>({}),
+      price:async()=>({}),
     };
     const {app}=createSetupApp(idle,async()=>undefined,tasks);
     expect((await app.request('/setup/agent/swap',{method:'POST',body:JSON.stringify({amount:'5'})})).status).toBe(403);

@@ -12,20 +12,24 @@ export interface Facilitator {
 }
 export class Payments {
   constructor(readonly mirror:Mirror,readonly store:Store,readonly payTo:string,readonly facilitator:Facilitator=new HTTPFacilitatorClient({url:FACILITATOR})) { entityId.parse(payTo); }
-  async requirements():Promise<PaymentRequirements> {
+  async requirements(amount:string=PRICE):Promise<PaymentRequirements> {
     const [supported,token]=await Promise.all([this.facilitator.getSupported(),this.mirror.token(USDC)]);
     if(token.decimals!=='6' || token.deleted) throw new AppError('PAYMENT_ASSET_INVALID');
     const kind=supported.kinds.find(k=>k.x402Version===2 && k.scheme==='exact' && k.network===NETWORK);
     const feePayer=entityId.parse(kind?.extra?.feePayer);
     // Verify receiver is actually associated before advertising a payable resource.
     await this.mirror.balance(this.payTo,USDC);
-    return {scheme:'exact',network:NETWORK,asset:USDC,amount:PRICE,payTo:this.payTo,maxTimeoutSeconds:120,extra:{feePayer}};
+    return {scheme:'exact',network:NETWORK,asset:USDC,amount,payTo:this.payTo,maxTimeoutSeconds:120,extra:{feePayer}};
   }
-  challenge(requirements:PaymentRequirements,url:string) {
-    const body={x402Version:2 as const,resource:{url,description:'Signed Accountable Agent standing',mimeType:'application/json'},accepts:[requirements]};
+  challenge(requirements:PaymentRequirements,url:string,description='Signed Accountable Agent standing') {
+    const body={x402Version:2 as const,resource:{url,description,mimeType:'application/json'},accepts:[requirements]};
     return {body,header:encodePaymentRequiredHeader(body)};
   }
-  async accept(header:string,requirements:PaymentRequirements,resource:string,build:()=>Promise<unknown>) {
+  /**
+   * With `prepareFirst`, the paid work runs after the signature is verified and before settlement,
+   * so a buyer is never charged for a request the service could not fulfil.
+   */
+  async accept(header:string,requirements:PaymentRequirements,resource:string,build:()=>Promise<unknown>,{prepareFirst=false}:{prepareFirst?:boolean}={}) {
     if(header.length>65536) throw new AppError('PAYMENT_TOO_LARGE',400);
     let payload:PaymentPayload;
     try{payload=decodePaymentSignatureHeader(header);}catch{throw new AppError('PAYMENT_INVALID',400);}
@@ -37,7 +41,7 @@ export class Payments {
     if(tx.hasNonTransferOperations || tx.transactionIdAccountId!==requirements.extra?.feePayer) throw new AppError('PAYMENT_INVALID',400);
     const transfers=tx.tokenTransfers[USDC];
     const debit=transfers?.filter(t=>BigInt(t.amount)<0n);
-    if(!debit || debit.length!==1 || BigInt(debit[0].amount)!==-BigInt(PRICE)) throw new AppError('PAYMENT_INVALID',400);
+    if(!debit || debit.length!==1 || BigInt(debit[0].amount)!==-BigInt(requirements.amount)) throw new AppError('PAYMENT_INVALID',400);
     const payer=debit[0].accountId;
     if(payer===this.payTo) throw new AppError('PAYMENT_SELF_TRANSFER',400);
     const id=mirrorTxId(tx.transactionId);
@@ -51,6 +55,7 @@ export class Payments {
         const verification=await this.facilitator.verify(payload,requirements);
         if(!verification.isValid || verification.payer!==payer) throw new AppError('PAYMENT_SIGNATURE_INVALID',402);
       }
+      const prepared=prepareFirst?await build():undefined;
       const claim=this.store.claimPayment(id,hash,resource);
       if(claim.fresh) {
         try {
@@ -59,8 +64,8 @@ export class Payments {
         } catch { /* A timeout is ambiguous: recover exclusively from this exact mirror transaction. */ }
       }
       const confirmed=await this.mirror.waitTransaction(id);
-      verifyTransfer(confirmed,{txId:id,asset:USDC,payTo:this.payTo,payer,amount:BigInt(PRICE)});
-      const body=await build();
+      verifyTransfer(confirmed,{txId:id,asset:USDC,payTo:this.payTo,payer,amount:BigInt(requirements.amount)});
+      const body=prepareFirst?prepared:await build();
       const responseHeader=encodePaymentResponseHeader({success:true,transaction:tx.transactionId,network:NETWORK,payer});
       const result={body,responseHeader}; this.store.finishPayment(id,result); return result;
     });

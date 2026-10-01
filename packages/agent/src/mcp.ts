@@ -12,6 +12,7 @@ import { publish } from './setup';
 import { roleKey } from './runtime';
 import { feedbackInput, giveFeedback } from './feedback';
 import { resolveAgent } from '../../shared/src/resolve';
+import { payService, priceOf, type ServiceRequest } from './pay';
 
 function deployment(){const d=readDeployment();if(!d?.agentAccount) throw new AppError('SETUP_REQUIRED');return d;}
 function answer(value:unknown){return {content:[{type:'text' as const,text:JSON.stringify(jsonSafe(value))}]};}
@@ -55,6 +56,14 @@ export function createAgentMcp() {
       const result=await publish(d,'fill',{status,transactionId,amount,asset:d.spendAsset,...(reason?{reason}:{})},'agent',`outcome-${id}-${status}`,store);
       return answer({transactionId,recordId:result.txId,status});
     }catch(error){return toolError(error);}finally{store.close();}
+  });
+  const service={url:z.string().url().max(500),prompt:z.string().min(1).max(4000).optional().describe('Sent as {"prompt": ...}, the body expected by the template paid inference endpoint'),body:z.record(z.unknown()).optional().describe('JSON body for other services; ignored when prompt is given')};
+  const request=(args:{url:string;prompt?:string;body?:Record<string,unknown>}):ServiceRequest=>({url:args.url,body:args.prompt!==undefined?{prompt:args.prompt}:args.body});
+  server.registerTool('service_price',{description:'Ask an x402 service what it charges, without paying. Reports the USDC amount on Hedera testnet and the account that would be paid.',inputSchema:service},async args=>{
+    try {return answer(await priceOf(request(args)));}catch(error){return toolError(error);}
+  });
+  server.registerTool('pay_service',{description:'Pay an x402 service in USDC on Hedera testnet and return its response. Checks the guardian policy (pause, caps, allowed token) immediately before signing with the agent key, refuses a price above maxAmount, confirms the transfer on the mirror and records it on HCS. Give sellerAgentId to require that the seller is that verified ERC-8004 agent.',inputSchema:{...service,maxAmount:uint.describe('Highest price you accept, in USDC smallest units (6 decimals): 10000 = 0.01 USDC'),sellerAgentId:uint.optional()}},async args=>{
+    try {return answer(await payService({...request(args),maxAmount:BigInt(args.maxAmount),sellerAgentId:args.sellerAgentId===undefined?undefined:BigInt(args.sellerAgentId)}));}catch(error){return toolError(error);}
   });
   server.registerTool('resolve_agent',{description:'Look up any agent by ERC-8004 ID and verify its card, HCS records, account key, policy and agreement before dealing with it. Includes its reviews. Read-only.',inputSchema:{agentId:uint}},async({agentId})=>{
     try {return answer(await resolveAgent(feedbackInput(agentId,'0').agentId));}catch(error){return toolError(error);}

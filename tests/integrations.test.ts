@@ -103,7 +103,7 @@ describe('agent tools and DEX fallback',()=>{
     const [clientTransport,serverTransport]=InMemoryTransport.createLinkedPair();
     const server=createAgentMcp(),client=new McpClient({name:'test',version:'1'});
     await server.connect(serverTransport);await client.connect(clientTransport);
-    expect((await client.listTools()).tools.map(t=>t.name).sort()).toEqual(['check_policy','give_feedback','link_account','record_outcome','resolve_agent']);
+    expect((await client.listTools()).tools.map(t=>t.name).sort()).toEqual(['check_policy','give_feedback','link_account','pay_service','record_outcome','resolve_agent','service_price']);
     await client.close();await server.close();
   });
   it('labels a verified pool quote read-only and rejects wrong token decimals',async()=>{

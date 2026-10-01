@@ -70,16 +70,18 @@ export async function dailySpend(events:ConsensusEvent[],account:string,asset:st
     if(tx.result!=='SUCCESS') throw new AppError('HCS_FILL_MISMATCH');
     confirmed.add(txId);
     if(new Date(Number(tx.consensus_timestamp.split('.')[0])*1000).toISOString().slice(0,10)!==today) continue;
-    const {transfers}=await mirror.contractTransfers(txId,scheduled);
+    // An x402 payment is a plain token transfer; a swap's transfers are on the contract call's children.
+    const {transfers}=event.payload.kind==='x402'?{transfers:tx.token_transfers}:await mirror.contractTransfers(txId,scheduled);
     const net=transfers.filter(t=>t.account===account && t.token_id===asset).reduce((n,t)=>n+exactUnits(t.amount),0n);
     if(net<0n) total-=net;
   }
   return {total,confirmed};
 }
-export async function policySnapshot(d:Deployment,mirror:Mirror,pending:(confirmed:Set<string>)=>bigint):Promise<PolicySnapshot> {
+/** Policy state for spending `asset` (the swap token unless given); each token's daily spend is counted separately. */
+export async function policySnapshot(d:Deployment,mirror:Mirror,pending:(confirmed:Set<string>)=>bigint,asset=d.spendAsset):Promise<PolicySnapshot> {
   const facts=await readFacts(d,mirror);
-  const [balance,allowed,day]=await Promise.all([mirror.balance(d.agentAccount!,d.spendAsset),mirror.call(facts.policy,POLICY_ABI,'allowedTokens',[d.spendAsset]),dailySpend(facts.events,d.agentAccount!,d.spendAsset,mirror)]);
-  return {policyExists:true,paused:facts.paused,agentKeyActive:facts.keyState.agentKeyActive,hcsReady:true,identityRegistered:true,allowedTokens:allowed[0]?[d.spendAsset]:[],maxPerTx:facts.maxPerTx,maxPerDay:facts.maxPerDay,spentToday:day.total,pendingToday:pending(day.confirmed),balance};
+  const [balance,allowed,day]=await Promise.all([mirror.balance(d.agentAccount!,asset),mirror.call(facts.policy,POLICY_ABI,'allowedTokens',[asset]),dailySpend(facts.events,d.agentAccount!,asset,mirror)]);
+  return {policyExists:true,paused:facts.paused,agentKeyActive:facts.keyState.agentKeyActive,hcsReady:true,identityRegistered:true,allowedTokens:allowed[0]?[asset]:[],maxPerTx:facts.maxPerTx,maxPerDay:facts.maxPerDay,spentToday:day.total,pendingToday:pending(day.confirmed),balance};
 }
 export const ROUTER_ABI=new Interface(['function getAmountsOut(uint256,address[]) view returns(uint256[])','function swapExactTokensForTokens(uint256,uint256,address[],address,uint256) returns(uint256[])','function swapExactETHForTokens(uint256,address[],address,uint256) payable returns(uint256[])']);
 const FACTORY_ABI=new Interface(['function getPair(address,address) view returns(address)']);

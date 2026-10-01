@@ -8,6 +8,7 @@ import { StandingPanel } from './standing-panel';
 import { AgentCard } from './agent-card';
 import { AgentLookup, OwnReputation } from './agent-lookup';
 import { DexPanel } from './dex-panel';
+import { PayPanel } from './pay-panel';
 import { REASON_TEXT } from './reasons';
 import {
   ArrowUpRight,
@@ -20,6 +21,7 @@ import {
   Check,
   LockKeyhole,
   RotateCcw,
+  Receipt,
 } from "lucide-react";
 
 const tabs = [
@@ -28,6 +30,7 @@ const tabs = [
   "Identity",
   "Policy",
   "Standing",
+  "Pay services",
   "Optional DEX",
 ] as const;
 type Tab = (typeof tabs)[number];
@@ -166,6 +169,7 @@ export default function Home() {
               Fingerprint,
               SlidersHorizontal,
               ShieldCheck,
+              Receipt,
               ArrowUpRight,
             ][i];
             return (
@@ -540,6 +544,11 @@ export default function Home() {
           {tab === "Standing" && (
             <StandingPanel testnet={testnet} agentAccount={live?.deployment?.agentAccount} agreementVersion={live?.agreement?.version} onShowCard={() => setTab("Identity")} />
           )}
+          {tab === 'Pay services' && !testnet && <section className="panel detail">
+            <h2>Pay for services with x402</h2>
+            <p>After setup, the agent can pay HTTP services that charge per request over x402, in USDC on Hedera testnet and within its policy, and can sell paid LLM inference itself.</p>
+          </section>}
+          {tab === 'Pay services' && live?.mode==='testnet' && live.deployment && <PayPanel deployment={live.deployment} />}
           {tab === 'Optional DEX' && !testnet && <section className="panel detail">
             <h2>Optional SaucerSwap testnet route</h2>
             <p>After setup, this page reads a live SAUCE → WHBAR quote from SaucerSwap on Hedera testnet. The agent's own swaps are checked against its policy before it signs.</p>

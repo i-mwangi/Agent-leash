@@ -6,6 +6,7 @@ import { AppError, entityId, uint } from '../../shared/src/model';
 import { advance, chooseGuardian, type Progress } from './wizard';
 import { spend } from './spend';
 import { cancelSchedule, listSchedules, reconcileSchedules, scheduleSwap } from './schedule';
+import { payService, priceOf, type ServiceRequest } from './pay';
 
 /** Agent work the dashboard can request. Each one runs the same policy-checked code as the CLI. */
 export interface AgentTasks {
@@ -13,8 +14,10 @@ export interface AgentTasks {
   schedule:(amount:bigint,executeAt:string)=>Promise<unknown>;
   cancel:(scheduleId:string)=>Promise<unknown>;
   schedules:()=>unknown[];
+  pay:(request:ServiceRequest)=>Promise<unknown>;
+  price:(request:ServiceRequest)=>Promise<unknown>;
 }
-const agentTasks:AgentTasks={swap:spend,schedule:scheduleSwap,cancel:id=>cancelSchedule(id,'CANCELLED_FROM_DASHBOARD'),schedules:listSchedules};
+const agentTasks:AgentTasks={swap:spend,schedule:scheduleSwap,cancel:id=>cancelSchedule(id,'CANCELLED_FROM_DASHBOARD'),schedules:listSchedules,pay:request=>payService(request),price:request=>priceOf(request)};
 const amountOf=(value:unknown)=>{
   const parsed=uint.safeParse(value);
   if(!parsed.success || BigInt(parsed.data)<=0n) throw new AppError('INVALID_AMOUNT',400);
@@ -88,6 +91,20 @@ export function createSetupApp(run:()=>Promise<Progress>=()=>advance(),select:(i
     const id=entityId.safeParse(c.req.param('id'));
     if(!id.success) throw new AppError('INVALID_REQUEST',400);
     begin('cancel',()=>tasks.cancel(id.data));
+    return c.json(agentState());
+  });
+  const serviceRequest=(body:{url?:unknown;prompt?:unknown;maxAmount?:unknown;sellerAgentId?:unknown}|null):ServiceRequest=>{
+    if(typeof body?.url!=='string' || body.url.length>500) throw new AppError('INVALID_SERVICE_URL',400);
+    if(body.prompt!==undefined && (typeof body.prompt!=='string' || !body.prompt.trim() || body.prompt.length>4000)) throw new AppError('INVALID_PROMPT',400);
+    const seller=body.sellerAgentId===undefined || body.sellerAgentId===''?undefined:uint.safeParse(body.sellerAgentId);
+    if(seller && !seller.success) throw new AppError('INVALID_AGENT_ID',400);
+    return {url:body.url,body:body.prompt===undefined?undefined:{prompt:body.prompt},maxAmount:body.maxAmount===undefined?undefined:amountOf(body.maxAmount),sellerAgentId:seller?.success?BigInt(seller.data):undefined};
+  };
+  app.post('/setup/agent/price',async c=>c.json(await tasks.price(serviceRequest(await c.req.json().catch(()=>null)))));
+  app.post('/setup/agent/pay',async c=>{
+    const request=serviceRequest(await c.req.json().catch(()=>null));
+    if(request.maxAmount===undefined) throw new AppError('MAX_AMOUNT_REQUIRED',400);
+    begin('pay',()=>tasks.pay(request));
     return c.json(agentState());
   });
   return {app,start,busy:()=>!!task?.running};
