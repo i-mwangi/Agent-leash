@@ -1,13 +1,21 @@
 {
   "name": "accountable-agent",
   "version": "0.1.0",
-  "description": "Give an AI agent on Hedera a human guardian, a verifiable identity and guardian-approved spending rules, set up in the browser, with signed standing sold over x402.",
+  "description": "Give an AI agent on Hedera a human guardian, a verifiable identity and guardian-approved spending rules, set up in the browser. The agent swaps on SaucerSwap, pays x402 services now or on a schedule, and sells signed standing and LLM inference over x402.",
   "create-scaffold-hbar": {
-    "requirements": { "node": ">=22.13.0" },
+    "requirements": {
+      "node": ">=22.13.0"
+    },
     "capabilities": {
-      "frontend": ["nextjs-app"],
-      "solidityFramework": ["hardhat"],
-      "packageManager": ["npm"]
+      "frontend": [
+        "nextjs-app"
+      ],
+      "solidityFramework": [
+        "hardhat"
+      ],
+      "packageManager": [
+        "npm"
+      ]
     },
     "defaults": {
       "frontend": "nextjs-app",
@@ -19,7 +27,9 @@
         {
           "title": "1. Start Accountable Agent",
           "steps": [
-            { "command": "{run:dev}" },
+            {
+              "command": "{run:dev}"
+            },
             {
               "text": "Starts the dashboard (:3000), the standing API (:3001) and the local agent runtime (:3002). Missing local keys are generated into ignored .env files and never printed."
             }
@@ -33,7 +43,7 @@
               "url": "http://localhost:3000"
             },
             {
-              "text": "Connect HashPack with an ECDSA testnet account holding about 50 HBAR; it becomes the guardian. Approve four transactions: fund the setup account, create the HCS topic, allow the spend asset, approve the agreement. The agent runtime does the rest."
+              "text": "Connect HashPack with an ECDSA testnet account holding about 50 HBAR; it becomes the guardian. Approve four transactions: fund the setup account, create the HCS topic, allow SAUCE and USDC, approve the agreement. The agent runtime does the rest."
             },
             {
               "label": "Need testnet HBAR?",
@@ -42,10 +52,14 @@
           ]
         },
         {
-          "title": "3. When setup completes",
+          "title": "3. Fund the agent and use it",
           "steps": [
             {
-              "text": "The dashboard switches from the synthetic demo to live testnet data: your agent's 1-of-2 account, HCS profile, ERC-8004 identity, guardian controls and paid standing at /standing/:id."
+              "text": "Step 9 funds the agent: HBAR and SAUCE from the setup account, USDC from Circle's testnet faucet. Once funded it is live: swap on Optional DEX, pay x402 services on Pay services, sell LLM inference with your own provider key, and sell paid standing at /standing/:id."
+            },
+            {
+              "label": "Testnet USDC",
+              "url": "https://faucet.circle.com/"
             },
             {
               "label": "Verify the build",
