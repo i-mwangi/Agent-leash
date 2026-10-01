@@ -291,7 +291,7 @@ npm run agent -- cancel-schedule 0.0.12345
 ```
 
 - Amounts are raw smallest units. Testnet USDC `0.0.429274` and SAUCE `0.0.1183558` both have six decimals: `1000` is 0.001 USDC and `1000000` is 1 SAUCE. The dashboard converts the amount you type using the decimals read from the mirror.
-- **The agent pays its own network fees in HBAR.** Hedera requires the payer to cover the full gas limit, so swaps use 300,000 gas (a swap measured 112,946). Before signing, the agent checks it holds enough HBAR at the current gas price: about 0.35 HBAR for a swap and 1.6 HBAR to schedule one, since creating a schedule costs about 1.05 HBAR. The DEX page shows the agent's HBAR. `fund-agent 300000000` sends 3 HBAR from the setup account; sending HBAR from HashPack works too.
+- **The agent pays its own network fees in HBAR.** Hedera requires the payer to cover the full gas limit, so swaps use 300,000 gas (a swap measured 112,946). Before signing, the agent checks it holds enough HBAR at the current gas price: about 0.35 HBAR for a swap and 1.6 HBAR to schedule one, since creating a schedule costs about 1.05 HBAR. The DEX page shows the agent's HBAR. `fund-agent 300000000` sends 3 HBAR from the setup account to the agent, and `fund-agent 2000000000 0.0.12345` sends 20 HBAR to another agent account you run; sending HBAR from HashPack works too.
 - `fund-dex 100000000` uses up to 1 HBAR of operator funds to buy testnet SAUCE for the agent. It is a funding trade, not the policy-gated agent spend. Check the live quote and operator balance first.
 - `spend` serializes requests, reserves the amount durably before submission, checks mirror-backed account, HCS, registry, policy and balance sources immediately before signing, and confirms the router call and token amounts before publishing a fill. Uncertain submissions stay reserved; a mirror-confirmed failed swap is recorded to HCS and released.
 - `schedule-swap` runs the same policy check, then signs a `ScheduleCreate` that wraps the router call, with `waitForExpiry` set to the chosen time and a 1-of-2 admin key (guardian and agent). It accepts up to 3% less output than quoted, keeps the router allowance covering every pending schedule, reserves the amount against the daily limit until the outcome is recorded, and publishes a `scheduled` record to HCS.
@@ -349,30 +349,30 @@ npm run agent -- pay-standing
 
 Run as `npm run agent -- <command>`.
 
-| Command                                                            | Description                                                                 |
-| ------------------------------------------------------------------ | --------------------------------------------------------------------------- |
-| `onboard`                                                          | Resumable CLI setup: accounts, topic, UAID, policy, registration, draft     |
-| `draft-agreement` / `approve-agreement`                            | Write the agreement draft / sign and publish it with the local guardian key |
-| `status`                                                           | Cross-check account key, HCS events, registry card and policy on the mirror |
-| `pay-standing`                                                     | Pay 0.001 USDC for standing and verify the signed report                    |
-| `pause` / `unpause` / `revoke` / `restore`                         | Guardian actions with the local guardian key                                |
-| `caps TX DAY`                                                      | Set new policy caps (requires a new agreement approval)                     |
-| `reconcile-pause TXID`                                             | Record the missing HCS event for a confirmed browser pause                  |
-| `draft-vault-terms FILE` / `approve-vault-terms` / `deploy-vault`  | Compile, approve and deploy vault terms                                     |
-| `vault-status` / `allow-vault-recipients`                          | Verify the vault and its installed recipient list                           |
-| `fund-vault TINYBARS` / `vault-spend RECIPIENT TINYBARS`           | Fund the vault / spend from it as the agent                                 |
-| `vault-pause` / `vault-unpause` / `vault-revoke` / `vault-recover` | Guardian vault controls                                                     |
-| `quote AMOUNT` / `quote-fallback AMOUNT`                           | Read-only SaucerSwap quotes                                                 |
-| `fund-dex TINYBARS` / `spend AMOUNT` / `configure-dex`             | DEX funding, policy-checked swap, route update                              |
-| `schedule-swap AMOUNT ISO_TIME`                                    | Policy-checked swap that Hedera executes at the given time                  |
-| `fund-agent TINYBARS`                                              | Send setup-account HBAR to the agent for network fees                       |
-| `schedules` / `cancel-schedule SCHEDULE_ID`                        | Record scheduled-swap outcomes and list them / delete a pending one         |
-| `init` / `setup` / `register` / `adopt PUBLIC_DEPLOYMENT_JSON`     | Individual setup steps and reattaching an existing deployment               |
-| `set-standing-url HTTPS_URL`                                       | Publish a reachable standing base URL in the agent's ERC-8004 card          |
-| `lookup AGENT_ID`                                                  | Verify any agent by ERC-8004 ID and list its reviews (read-only)            |
-| `give-feedback AGENT_ID SCORE [TAG]`                               | Rate another agent 0–100 in the ERC-8004 reputation registry                |
-| `evidence`                                                         | Print the recorded testnet transaction links                                |
-| `mcp`                                                              | Start the local stdio MCP server                                            |
+| Command                                                            | Description                                                                        |
+| ------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `onboard`                                                          | Resumable CLI setup: accounts, topic, UAID, policy, registration, draft            |
+| `draft-agreement` / `approve-agreement`                            | Write the agreement draft / sign and publish it with the local guardian key        |
+| `status`                                                           | Cross-check account key, HCS events, registry card and policy on the mirror        |
+| `pay-standing`                                                     | Pay 0.001 USDC for standing and verify the signed report                           |
+| `pause` / `unpause` / `revoke` / `restore`                         | Guardian actions with the local guardian key                                       |
+| `caps TX DAY`                                                      | Set new policy caps (requires a new agreement approval)                            |
+| `reconcile-pause TXID`                                             | Record the missing HCS event for a confirmed browser pause                         |
+| `draft-vault-terms FILE` / `approve-vault-terms` / `deploy-vault`  | Compile, approve and deploy vault terms                                            |
+| `vault-status` / `allow-vault-recipients`                          | Verify the vault and its installed recipient list                                  |
+| `fund-vault TINYBARS` / `vault-spend RECIPIENT TINYBARS`           | Fund the vault / spend from it as the agent                                        |
+| `vault-pause` / `vault-unpause` / `vault-revoke` / `vault-recover` | Guardian vault controls                                                            |
+| `quote AMOUNT` / `quote-fallback AMOUNT`                           | Read-only SaucerSwap quotes                                                        |
+| `fund-dex TINYBARS` / `spend AMOUNT` / `configure-dex`             | DEX funding, policy-checked swap, route update                                     |
+| `schedule-swap AMOUNT ISO_TIME`                                    | Policy-checked swap that Hedera executes at the given time                         |
+| `fund-agent TINYBARS [ACCOUNT]`                                    | Send setup-account HBAR for network fees to the agent, or to another agent account |
+| `schedules` / `cancel-schedule SCHEDULE_ID`                        | Record scheduled-swap outcomes and list them / delete a pending one                |
+| `init` / `setup` / `register` / `adopt PUBLIC_DEPLOYMENT_JSON`     | Individual setup steps and reattaching an existing deployment                      |
+| `set-standing-url HTTPS_URL`                                       | Publish a reachable standing base URL in the agent's ERC-8004 card                 |
+| `lookup AGENT_ID`                                                  | Verify any agent by ERC-8004 ID and list its reviews (read-only)                   |
+| `give-feedback AGENT_ID SCORE [TAG]`                               | Rate another agent 0–100 in the ERC-8004 reputation registry                       |
+| `evidence`                                                         | Print the recorded testnet transaction links                                       |
+| `mcp`                                                              | Start the local stdio MCP server                                                   |
 
 ---
 

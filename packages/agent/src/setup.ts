@@ -3,7 +3,7 @@ import { AbiCoder, Wallet, getBytes, keccak256, toUtf8Bytes } from 'ethers';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ROOT, DATA, readDeployment, saveDeployment } from '../../shared/src/files';
-import { AppError, deploymentSchema, evmAddress, USDC, type Deployment, type ProfileEvent } from '../../shared/src/model';
+import { AppError, deploymentSchema, entityId, evmAddress, USDC, type Deployment, type ProfileEvent } from '../../shared/src/model';
 import { Mirror, exactUnits } from '../../shared/src/mirror';
 import { Store } from '../../shared/src/store';
 import { accountKeyState, checkDeploymentKeys, normalizedPublic } from '../../shared/src/keys';
@@ -191,16 +191,22 @@ export async function configureDex() {
     d.spendAsset=FALLBACK.assetIn;d.outputAsset=FALLBACK.assetOut;saveDeployment(d);return d;
   });}finally{store.close();}
 }
-/** Send operator HBAR to the agent account for network fees; the agent pays for its own swaps and records. */
-export async function fundAgent(tinybars:bigint) {
-  if(tinybars<=0n || tinybars>1_000_000_000n) throw new AppError('FUND_AMOUNT_OUT_OF_RANGE',400);
-  const d=readDeployment();if(!d?.agentAccount) throw new AppError('SETUP_REQUIRED');
+/**
+ * Send operator HBAR for network fees to this deployment's agent, or to another agent account you run
+ * (for example one set up in a separate scaffold). Agents pay for their own swaps and records.
+ */
+export async function fundAgent(tinybars:bigint,account?:string) {
+  if(tinybars<=0n || tinybars>5_000_000_000n) throw new AppError('FUND_AMOUNT_OUT_OF_RANGE',400);
+  const d=readDeployment();if(!d) throw new AppError('SETUP_REQUIRED');
+  const target=account?entityId.parse(account):d.agentAccount;if(!target) throw new AppError('SETUP_REQUIRED');
+  const existing=await new Mirror().account(target);
+  if(existing.deleted || target===d.operatorId) throw new AppError('FUND_TARGET_INVALID',400);
   const client=clientFor(d.operatorId,roleKey('operator'));const store=new Store(resolve(DATA,'operator.sqlite'));
   try {return await store.exclusive('fund-agent',async()=>{
     const amount=Hbar.fromTinybars(tinybars.toString());
-    const result=await nativeOperation(`fund-agent-${tinybars}-${Date.now()}`,new TransferTransaction().addHbarTransfer(d.operatorId,amount.negated()).addHbarTransfer(d.agentAccount!,amount),client,store);
-    const balance=(await new Mirror().account(d.agentAccount!)).balance.balance;
-    return {transactionId:result.txId,agentAccount:d.agentAccount,sentTinybars:tinybars.toString(),agentHbarTinybars:String(balance)};
+    const result=await nativeOperation(`fund-agent-${tinybars}-${Date.now()}`,new TransferTransaction().addHbarTransfer(d.operatorId,amount.negated()).addHbarTransfer(target,amount),client,store);
+    const balance=(await new Mirror().account(target)).balance.balance;
+    return {transactionId:result.txId,account:target,sentTinybars:tinybars.toString(),hbarTinybars:String(balance)};
   });}finally{client.close();store.close();}
 }
 /** Buy testnet SAUCE for the agent with operator HBAR; separate from the agent's policy-checked spend. */
