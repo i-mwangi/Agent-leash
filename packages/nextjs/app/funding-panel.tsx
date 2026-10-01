@@ -1,10 +1,10 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { toUnits, tokenAmount } from "./live-data";
+import { readiness, toUnits, tokenAmount } from "./live-data";
 import { REASON_TEXT } from "./reasons";
 
 type Token = { id: string; symbol: string; decimals: number; balance: string | null };
-type Funding = { agentAccount: string; setupAccount: string; hbar: { balance: string; forSwap: string; forSchedule: string }; spendToken: Token; usdc: Token; setupHbar: string; canBuySpendToken: boolean };
+export type Funding = { agentAccount: string; setupAccount: string; hbar: { balance: string; forSwap: string; forSchedule: string }; spendToken: Token; usdc: Token; setupHbar: string; canBuySpendToken: boolean };
 
 const HEADERS = { "x-accountable-setup": "1", "Content-Type": "application/json" };
 const CIRCLE_FAUCET = "https://faucet.circle.com/";
@@ -25,7 +25,7 @@ async function call<T>(path: string, body?: unknown): Promise<T> {
  * agent up: HBAR and the swap token are paid by the setup account through the local runtime; testnet
  * USDC comes from Circle's faucet, sent straight to the agent's account.
  */
-export function FundingPanel() {
+export function FundingPanel({ onStatus }: { onStatus?: (ready: boolean) => void }) {
   const [funding, setFunding] = useState<Funding | null>(null);
   const [offline, setOffline] = useState(false);
   const [hbarAmount, setHbarAmount] = useState("3");
@@ -39,6 +39,7 @@ export function FundingPanel() {
     call<Funding>("").then(value => { setFunding(value); setOffline(false); }).catch(() => setOffline(true));
   }, []);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (funding) onStatus?.(readiness(funding).ready); }, [funding, onStatus]);
 
   if (offline) return <p>Restart <code className="command">npm run dev</code> to fund the agent from here: the local agent runtime pays the top-ups.</p>;
   if (!funding) return <p>Reading the agent&apos;s balances…</p>;
@@ -62,12 +63,17 @@ export function FundingPanel() {
   }
 
   const hbarLow = BigInt(funding.hbar.balance) < BigInt(funding.hbar.forSchedule);
+  const ready = readiness(funding);
   const usdcEmpty = !funding.usdc.balance || funding.usdc.balance === "0";
   const spendEmpty = !funding.spendToken.balance || funding.spendToken.balance === "0";
   return (
     <div className="funding">
+      <p className="readiness">
+        Ready for swaps: <strong>{ready.swaps ? "yes" : "no"}</strong> · Ready for x402 payments: <strong>{ready.payments ? "yes" : "no"}</strong>
+        {!ready.ready && <> · Fund at least one to make the agent live.</>}
+      </p>
       <p>
-        Setup gives the agent a little HBAR and nothing else. Fund it for the features you want to use. Top-ups are paid by
+        Setup gives the agent a little HBAR and nothing else. Swaps need fee HBAR and {funding.spendToken.symbol}; x402 payments need USDC. Top-ups are paid by
         the setup account <a href={`https://hashscan.io/testnet/account/${funding.setupAccount}`} target="_blank" rel="noreferrer">{funding.setupAccount}</a>,
         which has <strong>{hbar(funding.setupHbar)}</strong> left (it keeps 2 HBAR for its own records).
       </p>

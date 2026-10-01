@@ -79,3 +79,14 @@ describe('funding the agent after setup',()=>{
     expect(policyTokens('0.0.429274')).toEqual(['0.0.429274']);
   });
 });
+
+describe('when a funded agent counts as live',()=>{
+  it('needs fee HBAR and the swap token for swaps, or USDC for x402 payments',async()=>{
+    const { readiness } = await import('../packages/nextjs/app/live-data');
+    const base={hbar:{balance:'500000000',forSwap:'34300000'},spendToken:{balance:'0'},usdc:{balance:null as string|null}};
+    expect(readiness(base)).toEqual({swaps:false,payments:false,ready:false});
+    expect(readiness({...base,spendToken:{balance:'1000000'}})).toEqual({swaps:true,payments:false,ready:true});
+    expect(readiness({...base,hbar:{balance:'1000',forSwap:'34300000'},spendToken:{balance:'1000000'}}).swaps).toBe(false);
+    expect(readiness({...base,usdc:{balance:'10000'}})).toEqual({swaps:false,payments:true,ready:true});
+  });
+});

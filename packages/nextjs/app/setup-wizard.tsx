@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { checkWalletTransaction, guardianBalance, requiredTinybars, verifyAgreementMessage, walletRejected, type Progress, type SetupState } from './setup-actions';
 import { WALLETCONNECT_PROJECT_ID } from './wallet-config';
 import { connectWallet, disconnectWallet, restoredAccounts, signerFor } from './wallet-session';
+import { FundingPanel } from './funding-panel';
 
 type WalletStage='fund'|'topic'|'allow'|'agreement';
 type Pending={stage:WalletStage;transactionId:string;submittedAt:number};
@@ -18,7 +19,11 @@ const STEPS:{label:string;wallet:boolean;stage:Progress['stage']|null;kind?:stri
   {label:'Allow the spend asset and USDC in the policy',wallet:true,stage:'allow'},
   {label:'Register the ERC-8004 identity',wallet:false,stage:null},
   {label:'Review and approve the agreement',wallet:true,stage:'agreement'},
+  {label:'Fund the agent',wallet:false,stage:null,kind:'Setup account or faucet'},
+  {label:'Live: ready to transact',wallet:false,stage:null,kind:'Status'},
 ];
+/** Steps after the on-chain setup: funding is required before the agent can transact. */
+const FUND_STEP=8,LIVE_STEP=9;
 const STAGE_INDEX:Record<Progress['stage'],number>={connect:0,fund:1,topic:3,allow:5,agreement:7,done:8,cli:8};
 const hbar=(tinybars:string)=>(Number(BigInt(tinybars))/1e8).toString();
 
@@ -38,6 +43,7 @@ export function SetupWizard() {
   const [busy,setBusy]=useState(false);
   const [message,setMessage]=useState('');
   const [pending,setPending]=useState<Pending|null>(null);
+  const [funded,setFunded]=useState<boolean|null>(null);
   const progress=state?.progress??null;
 
   const savePending=(value:Pending|null)=>{
@@ -167,17 +173,20 @@ export function SetupWizard() {
 
   if(offline) return <div className="notice">The local setup runtime is not reachable. Start the dashboard with <code>npm run dev</code> from the project root; it runs the setup runtime alongside the API.</div>;
   if(!state || !progress) return <div className="notice">{state?.lastError?`Setup check failed: ${state.lastError}`:'Checking setup progress…'}</div>;
-  if(progress.stage==='cli') return <div className="notice"><strong>Configured with the CLI</strong><p>Agent <a href={`https://hashscan.io/testnet/account/${progress.deployment?.agentAccount}`} target="_blank" rel="noreferrer">{progress.deployment?.agentAccount}</a> uses a local guardian key. Browser setup is for new workspaces; use a fresh scaffold for another agent.</p></div>;
+  if(progress.stage==='cli') return <><div className="notice"><strong>Configured with the CLI</strong><p>Agent <a href={`https://hashscan.io/testnet/account/${progress.deployment?.agentAccount}`} target="_blank" rel="noreferrer">{progress.deployment?.agentAccount}</a> uses a local guardian key. Browser setup is for new workspaces; use a fresh scaffold for another agent.</p></div><div className="fund-step" id="fund-agent"><h3>Fund the agent</h3><FundingPanel/></div></>;
 
   const current=STAGE_INDEX[progress.stage];
   const stage=progress.stage;
   const walletStage=(['fund','topic','allow','agreement'] as const).find(s=>s===stage);
   return <div className="create-agent-form setup-wizard">
     <h3>Set up this agent on Hedera testnet</h3>
-    <p>Your HashPack account becomes the guardian and approves four transactions. The local agent runtime performs the other steps with generated keys that stay on this machine; the browser only receives public keys.</p>
+    <p>Your HashPack account becomes the guardian and approves four transactions. The local agent runtime performs the other steps with generated keys that stay on this machine; the browser only receives public keys. Finally, fund the agent so it can transact.</p>
     <ol className="setup-steps">
       {STEPS.map((step,index)=>{
-        const status=index<current||progress.stage==='done'?'done':index===current&&!state.running?'current':'todo';
+        // Funding and Live follow the on-chain steps: funding is current until the agent can transact.
+        const status=index===FUND_STEP||index===LIVE_STEP
+          ?(stage!=='done'?'todo':funded?'done':index===FUND_STEP&&funded===false?'current':'todo')
+          :index<current||progress.stage==='done'?'done':index===current&&!state.running?'current':'todo';
         return <li key={step.label} className={`setup-step ${status}`}><span>{status==='done'?'✓':index+1}</span>{step.label}<small>{step.kind??(step.wallet?'HashPack approval':'Automatic')}</small></li>;
       })}
     </ol>
@@ -185,7 +194,8 @@ export function SetupWizard() {
     {state.lastError&&!state.running&&<p role="alert">Setup stopped: <code>{state.lastError}</code>. {state.lastError.includes('INSUFFICIENT')?'The setup account needs more HBAR; send some from the guardian account, then retry.':'Retry after checking the message.'} <button className="secondary" disabled={busy} onClick={()=>void perform(async()=>{setState(await api('/setup/advance',{method:'POST'}));})}>Retry</button></p>}
     {stage==='fund'&&<p>The guardian creates the setup account with <strong>{hbar(progress.fundingTinybars)} HBAR</strong>. It pays for the agent account, HCS records, policy deployment and ERC-8004 registration (about 30 HBAR); the rest stays in the setup account.</p>}
     {stage==='agreement'&&progress.agreement&&<div className="notice"><strong>Agreement to approve</strong><p>Scope: client-enforced technical policy, not a legal agreement. Asset {String(progress.agreement.terms.spendAsset)}; at most {String(progress.agreement.terms.maxPerTx)} per transaction and {String(progress.agreement.terms.maxPerDay)} per UTC day (raw units); policy {String(progress.agreement.terms.policyContract)}.</p><p>Hash <code>{progress.agreement.hash}</code>. Approving publishes these exact terms to the agent's HCS topic from your guardian account.</p></div>}
-    {stage==='done'&&<p role="status">Setup complete: agent <a href={`https://hashscan.io/testnet/account/${progress.deployment?.agentAccount}`} target="_blank" rel="noreferrer">{progress.deployment?.agentAccount}</a>, ERC-8004 ID {progress.deployment?.erc8004AgentId}. {sawIncomplete.current?'Loading the live dashboard once the API has verified it…':'The dashboard shows its live testnet data.'}</p>}
+    {stage==='done'&&<p role="status">{funded?'Live':'On-chain setup complete'}: agent <a href={`https://hashscan.io/testnet/account/${progress.deployment?.agentAccount}`} target="_blank" rel="noreferrer">{progress.deployment?.agentAccount}</a>, ERC-8004 ID {progress.deployment?.erc8004AgentId}. {sawIncomplete.current?'Loading the live dashboard once the API has verified it…':funded?'The agent is funded and can swap or pay within its policy.':'Fund the agent below before it can swap or pay services.'}</p>}
+    {stage==='done'&&<div className="fund-step" id="fund-agent"><h3>9. Fund the agent</h3><FundingPanel onStatus={setFunded}/></div>}
     {pending&&<p>Waiting for <a href={`https://hashscan.io/testnet/transaction/${encodeURIComponent(pending.transactionId)}`} target="_blank" rel="noreferrer">{pending.stage} transaction</a> to reach the mirror. It will not be resubmitted.</p>}
     {!PROJECT_ID&&<p role="alert">Set <code>NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID</code> in <code>packages/nextjs/.env.local</code> and restart the dashboard to connect HashPack.</p>}
     <div className="create-agent-actions">

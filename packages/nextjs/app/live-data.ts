@@ -53,3 +53,12 @@ export function createLiveReader(update:(state:ReadState)=>void, fetcher:typeof 
     dispose() { ++generation;controller?.abort(); },
   };
 }
+
+/** Swaps need fee HBAR and the swap token; x402 payments need only USDC (Blocky402 pays their fee). */
+export function readiness(f: { hbar: { balance: string; forSwap: string }; spendToken: { balance: string | null }; usdc: { balance: string | null } }) {
+  const positive = (token: { balance: string | null }) => !!token.balance && BigInt(token.balance) > 0n;
+  const swaps = BigInt(f.hbar.balance) >= BigInt(f.hbar.forSwap) && positive(f.spendToken);
+  const payments = positive(f.usdc);
+  return { swaps, payments, ready: swaps || payments };
+}
+

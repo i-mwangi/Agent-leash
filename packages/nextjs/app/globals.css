@@ -1179,3 +1179,16 @@ button.link {
   padding-left: 18px;
   font-size: 13px;
 }
+
+.fund-step {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid #eff1eb;
+}
+.fund-step h3 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.readiness {
+  font-size: 13px;
+}

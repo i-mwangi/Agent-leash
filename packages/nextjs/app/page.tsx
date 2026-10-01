@@ -3,7 +3,6 @@ import { useEffect, useRef, useState } from "react";
 import { createLiveReader, tokenAmount, type Snapshot, type SpendToken } from './live-data';
 import { GuardianWallet } from './guardian-wallet';
 import { SetupWizard } from './setup-wizard';
-import { FundingPanel } from './funding-panel';
 import { OverviewSummary } from './overview';
 import { StandingPanel } from './standing-panel';
 import { AgentCard } from './agent-card';
@@ -482,12 +481,6 @@ export default function Home() {
                 guardian-approved agreement.
               </p>
               <SetupWizard/>
-            </section>
-          )}
-          {tab === "Create agent" && live?.mode === "testnet" && live.deployment?.agentAccount && (
-            <section className="panel detail" id="fund-agent">
-              <h2>Fund your agent</h2>
-              <FundingPanel />
             </section>
           )}
           {live?.mode==='testnet' && live.deployment && <section className="panel detail compact" style={{display:tab==='Policy'?undefined:'none'}}><h2>Guardian actions in HashPack</h2><GuardianWallet deployment={live.deployment} onConfirmed={()=>{void reader.current?.refresh();}}/></section>}

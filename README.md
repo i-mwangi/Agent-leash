@@ -88,18 +88,20 @@ With `npm run dev` running and no deployment yet: the dashboard, `http://127.0.0
 
 ## Set up an agent in the browser
 
-After `npm run dev`, open **Create agent** and click **Connect HashPack**. The page asks for four HashPack approvals; the local agent runtime performs every other step.
+After `npm run dev`, open **Create agent** and click **Connect HashPack**. The page asks for four HashPack approvals; the local agent runtime performs every other step. The agent is **live** once it is funded.
 
-| Step                                            | Who                 |
-| ----------------------------------------------- | ------------------- |
-| Connect the guardian wallet                     | HashPack connection |
-| Fund the local setup account with 45 HBAR       | HashPack approval   |
-| Create the 1-of-2 agent account                 | Agent runtime       |
-| Create the HCS profile topic (guardian admin)   | HashPack approval   |
-| Publish the UAID and deploy the policy contract | Agent runtime       |
-| Allow the spend asset and USDC in the policy    | HashPack approval   |
-| Associate tokens and register ERC-8004          | Agent runtime       |
-| Review and approve the agreement                | HashPack approval   |
+| Step                                            | Who                     |
+| ----------------------------------------------- | ----------------------- |
+| Connect the guardian wallet                     | HashPack connection     |
+| Fund the local setup account with 45 HBAR       | HashPack approval       |
+| Create the 1-of-2 agent account                 | Agent runtime           |
+| Create the HCS profile topic (guardian admin)   | HashPack approval       |
+| Publish the UAID and deploy the policy contract | Agent runtime           |
+| Allow the spend asset and USDC in the policy    | HashPack approval       |
+| Associate tokens and register ERC-8004          | Agent runtime           |
+| Review and approve the agreement                | HashPack approval       |
+| Fund the agent (required before it transacts)   | Setup account or faucet |
+| Live: ready to transact                         | Status                  |
 
 When setup finishes, the API verifies the deployment (identity, HCS records, policy, registry card and agreement) and the dashboard switches from demo to live testnet data without a restart. If verification fails, it keeps serving demo and standing stays unpaid 503.
 
@@ -111,7 +113,7 @@ When setup finishes, the API verifies the deployment (identity, HCS records, pol
 - **Agreement approval.** The guardian's wallet publishes the exact terms, their hash and `approval: "guardian-hcs-transaction"` to the agent's topic. The guardian key signs that HCS transaction, and verifiers accept the record only when the mirror shows the guardian account as its payer. The page recomputes the terms hash before asking for approval. It is a technical policy record, not a legal agreement.
 - **WalletConnect.** The template ships a public WalletConnect project ID so HashPack connects from a fresh scaffold. To use your own, set `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` in `packages/nextjs/.env.local`.
 
-**Fund your agent.** Setup leaves the agent with 5 HBAR and no tokens. The **Fund your agent** panel at the end of **Create agent** shows what it holds for each feature and tops it up:
+**Fund the agent (step 9, required).** The on-chain steps leave the agent with 5 HBAR and no tokens, so it cannot swap or pay yet. Step 9 shows what it holds and tops it up. The agent becomes **live** (step 10) once it is ready for swaps (fee HBAR and SAUCE) or for x402 payments (USDC):
 
 | Agent holds | Used for                                          | How to top up                                                                                                                                          |
 | ----------- | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
