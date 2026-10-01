@@ -981,3 +981,30 @@ details.technical[open] summary {
   color: #8a9384;
   font-size: 12px;
 }
+.lookup-form {
+  display: grid;
+  grid-template-columns: minmax(200px, 360px) auto;
+  gap: 10px;
+  align-items: center;
+  margin: 12px 0;
+}
+.lookup-form .amount-field {
+  margin: 0;
+}
+.lookup-result h4 {
+  margin: 18px 0 4px;
+  font-size: 14px;
+}
+.notice.verdict.verified {
+  background: #eaf2e4;
+  border-color: #cfe0c4;
+}
+.notice.verdict.unverified {
+  background: #fbebe4;
+  border-color: #f0cdbf;
+}
+@media (max-width: 720px) {
+  .lookup-form {
+    grid-template-columns: 1fr;
+  }
+}

@@ -6,6 +6,7 @@ import { SetupWizard } from './setup-wizard';
 import { OverviewSummary } from './overview';
 import { StandingPanel } from './standing-panel';
 import { AgentCard } from './agent-card';
+import { AgentLookup, OwnReputation } from './agent-lookup';
 import {
   ArrowUpRight,
   ShieldCheck,
@@ -525,6 +526,7 @@ export default function Home() {
                       </li>
                     </ul>
                     <AgentCard agentId={d.erc8004AgentId!} registry={d.registry} />
+                    <OwnReputation agentId={d.erc8004AgentId!} />
                   </>
                 ) : (
                   <>
@@ -540,6 +542,7 @@ export default function Home() {
                     </div>
                   </>
                 )}
+                <AgentLookup />
               </section>
             );
           })()}

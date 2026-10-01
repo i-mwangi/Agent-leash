@@ -12,7 +12,12 @@ export function makeCard(d:Deployment) {
 }
 export function cardUri(d:Deployment){return 'data:application/json;base64,'+Buffer.from(JSON.stringify(makeCard(d))).toString('base64');}
 export function resolvePublicId(d:Deployment,id:string){return [d.agentAccount,d.erc8004AgentId,d.uaid].includes(id);}
-export async function readFacts(d:Deployment,mirror:Mirror,enforceAgreement=true) {
+/**
+ * The identity facts readFacts verifies. A local deployment satisfies it, and so can another
+ * agent reconstructed from its public card. Without a spendAsset, the agreement's own asset is used.
+ */
+export type FactsSource=Pick<Deployment,'name'|'operatorId'|'guardianId'|'guardianPublicKey'|'agentAccount'|'agentPublicKey'|'hcsTopic'|'policyAddress'|'erc8004AgentId'|'uaid'|'registry'>&{spendAsset?:string};
+export async function readFacts(d:FactsSource,mirror:Mirror,enforceAgreement=true) {
   if(!d.agentAccount || !d.hcsTopic || !d.policyAddress || !d.uaid || !d.erc8004AgentId || !d.guardianId) throw new AppError('IDENTITY_MISSING',409);
   const account=d.agentAccount,topic=d.hcsTopic,agentId=d.erc8004AgentId;
   const [accountInfo,allEvents,owner,uri,guardianInfo]=await Promise.all([
@@ -33,13 +38,13 @@ export async function readFacts(d:Deployment,mirror:Mirror,enforceAgreement=true
   if(!encoded.startsWith('data:application/json;base64,') || encoded.length>32768) throw new AppError('CARD_UNREACHABLE');
   let card:Record<string,unknown>;
   try{card=JSON.parse(Buffer.from(encoded.split(',')[1],'base64').toString('utf8'));}catch{throw new AppError('CARD_INVALID');}
-  const expected=makeCard(d);
+  const expected={hederaAccount:d.agentAccount,hcsTopic:d.hcsTopic,uaid:d.uaid,guardian:d.guardianId,policy:d.policyAddress};
   for(const field of ['hederaAccount','hcsTopic','uaid','guardian','policy'] as const) if(card[field]!==expected[field]) throw new AppError('CARD_IDENTITY_MISMATCH');
   const operator=await mirror.account(d.operatorId);
   if(String(owner[0]).toLowerCase()!==operator.evm_address.toLowerCase()) throw new AppError('REGISTRY_OWNER_MISMATCH');
   const [guardian,agent,paused,perTx,perDay]=await Promise.all(['guardian','agentAccount','paused','maxPerTx','maxPerDay'].map(method=>mirror.call(policy,POLICY_ABI,method)));
   if(String(guardian[0]).toLowerCase()!==guardianInfo.evm_address.toLowerCase() || agent[0]!==account) throw new AppError('POLICY_OWNER_MISMATCH');
-  let agreement: {hash:string;version:number}|undefined;
+  let agreement: {hash:string;version:number;spendAsset:string}|undefined;
   const recorded=latest('agreement');
   if(recorded) {
     if(recorded.publisher!==d.guardianId) throw new AppError('AGREEMENT_PUBLISHER_MISMATCH');
@@ -47,10 +52,10 @@ export async function readFacts(d:Deployment,mirror:Mirror,enforceAgreement=true
     try { signed=verifyRecordedAgreement(recorded.payload,guardianInfo.evm_address,recorded.publisher===d.guardianId); }
     catch { throw new AppError('AGREEMENT_SIGNATURE_INVALID'); }
     const terms=signed.agreement;
-    if(enforceAgreement && (terms.agentAccount!==account || terms.guardianAccount!==d.guardianId || terms.policyContract.toLowerCase()!==policy.toLowerCase() || terms.spendAsset!==d.spendAsset || BigInt(terms.maxPerTx)!==BigInt(perTx[0]) || BigInt(terms.maxPerDay)!==BigInt(perDay[0]))) throw new AppError('AGREEMENT_POLICY_MISMATCH');
+    if(enforceAgreement && (terms.agentAccount!==account || terms.guardianAccount!==d.guardianId || terms.policyContract.toLowerCase()!==policy.toLowerCase() || terms.spendAsset!==(d.spendAsset??terms.spendAsset) || BigInt(terms.maxPerTx)!==BigInt(perTx[0]) || BigInt(terms.maxPerDay)!==BigInt(perDay[0]))) throw new AppError('AGREEMENT_POLICY_MISMATCH');
     const allowed=await mirror.call(policy,POLICY_ABI,'allowedTokens',[terms.spendAsset]);
     if(enforceAgreement && !allowed[0]) throw new AppError('AGREEMENT_POLICY_MISMATCH');
-    agreement={hash:signed.hash,version:terms.version};
+    agreement={hash:signed.hash,version:terms.version,spendAsset:terms.spendAsset};
   }
   return {account:accountInfo,events,card,policy,keyState,paused:Boolean(paused[0]),maxPerTx:BigInt(perTx[0]),maxPerDay:BigInt(perDay[0]),agreement};
 }

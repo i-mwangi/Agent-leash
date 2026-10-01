@@ -19,6 +19,7 @@ Anyone can hand an AI agent a wallet. Nothing about that wallet makes the agent 
 - **Verifiable identity** — HCS profile topic, HCS-14 UAID and ERC-8004 registration on Hedera testnet
 - **Guardian-approved terms** — the agreement hash is published to HCS and bound into every standing report
 - **Paid standing** — `GET /standing/:id` sells an EIP-712 signed report over x402 (USDC via Blocky402, settlement confirmed on the mirror)
+- **Agent lookup and reputation** — verify any other agent by its ERC-8004 ID before dealing with it, and rate agents you dealt with in the ERC-8004 reputation registry on Hedera
 - **Contract-enforced vault (optional)** — caps, recipient allowlist, pause and recovery that hold even if the agent bypasses its client
 - **Guardian wallet controls** — pause, unpause and vault recovery from HashPack in the dashboard
 - **Optional DEX example** — a policy-checked SaucerSwap swap on testnet
@@ -115,14 +116,14 @@ When setup finishes, the API verifies the deployment (identity, HCS records, pol
 
 ## What is enforced, and what is not
 
-| Need                                        | What the template provides                                                                                                                                                                                            | Enforced by                                         |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| Someone answerable for the agent            | A **guardian** account holding the second key of the agent's 1-of-2 Hedera account, named in the agent's HCS profile and ERC-8004 registration                                                                        | Hedera account key                                  |
-| Stop and recover                            | Guardian `pause`/`unpause` in the policy contract, and `revoke`, which updates the agent account to a guardian-only key                                                                                               | Pause: supplied client only. Revoke: Hedera network |
-| Spending rules written as terms             | For the optional vault, one sentence in a fixed grammar (_"No more than 0.01 HBAR per transaction and 0.05 HBAR per UTC day; only to 0x…"_) compiles to a per-transaction cap, a per-UTC-day cap and a recipient list | Vault contract                                      |
-| Rules that hold against a misbehaving agent | `GuardedHbarVault` checks caps, the recipient allowlist, pause and the active agent on every `spend()`, even if the agent bypasses the supplied client                                                                | Vault contract, for HBAR deposited into it          |
-| Signed terms anchored on-chain              | The guardian approves the terms hash. The vault stores it as `agreementHash`, and a guardian-approved policy record is published to the agent's HCS topic by the guardian account                                     | Hedera contract state and HCS                       |
-| Counterparties can check the agent          | `GET /standing/:id` sells an EIP-712 signed standing report over x402. Version 2 binds the HCS policy record; version 3 also signs verified vault rules and state                                                     | Offline signature verification and Hashscan         |
+| Need                                        | What the template provides                                                                                                                                                                                                                                                        | Enforced by                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| Someone answerable for the agent            | A **guardian** account holding the second key of the agent's 1-of-2 Hedera account, named in the agent's HCS profile and ERC-8004 registration                                                                                                                                    | Hedera account key                                               |
+| Stop and recover                            | Guardian `pause`/`unpause` in the policy contract, and `revoke`, which updates the agent account to a guardian-only key                                                                                                                                                           | Pause: supplied client only. Revoke: Hedera network              |
+| Spending rules written as terms             | For the optional vault, one sentence in a fixed grammar (_"No more than 0.01 HBAR per transaction and 0.05 HBAR per UTC day; only to 0x…"_) compiles to a per-transaction cap, a per-UTC-day cap and a recipient list                                                             | Vault contract                                                   |
+| Rules that hold against a misbehaving agent | `GuardedHbarVault` checks caps, the recipient allowlist, pause and the active agent on every `spend()`, even if the agent bypasses the supplied client                                                                                                                            | Vault contract, for HBAR deposited into it                       |
+| Signed terms anchored on-chain              | The guardian approves the terms hash. The vault stores it as `agreementHash`, and a guardian-approved policy record is published to the agent's HCS topic by the guardian account                                                                                                 | Hedera contract state and HCS                                    |
+| Counterparties can check the agent          | A free lookup verifies any agent's ERC-8004 card, HCS records, key, policy and agreement and lists its reviews. `GET /standing/:id` sells an EIP-712 signed standing report over x402; version 2 binds the HCS policy record, version 3 also signs verified vault rules and state | Hedera mirror reads, offline signature verification and Hashscan |
 
 **Limits**
 
@@ -207,9 +208,30 @@ npm run agent -- spend 1000000
 - New deployments use the live SaucerSwap V1 SAUCE → WHBAR pool. For an older USDC → WHBAR deployment, run `restore` if the agent key was revoked, then `configure-dex`.
 - Run guardian `revoke` only after the intended agent spends.
 
+### Look up and rate other agents
+
+Registering an agent only helps if others can check it. The **Identity** page, `npm run agent -- lookup AGENT_ID` and the `GET /agents/:id` API route look up any agent in the ERC-8004 identity registry on Hedera testnet and verify it the same way paid standing verifies this one: the registry card, the HCS records published by its registry owner and guardian, its 1-of-2 account key, its policy contract and any guardian-approved agreement (both the CLI signature and the wallet format). The result is one of:
+
+| Result            | Meaning                                                                                                        |
+| ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| `verified`        | Every check passed; key state, pause state, caps and agreement are shown                                       |
+| `unverified`      | The card could not be confirmed on Hedera; the failing check is named. Do not rely on it                       |
+| `not-accountable` | Registered, but the card does not describe a guardian-controlled agent this template can verify                |
+| `external-card`   | The card is hosted at a URL. It is not fetched, so a lookup can never make the server request an arbitrary URL |
+
+Each lookup also lists the agent's reviews from the ERC-8004 **reputation** registry (`0x8004B663…8713`, Hedera `0.0.7919998`). The registry's summary needs an explicit reviewer list, its Sybil guard, so every review is shown with its reviewer's account rather than as a bare average.
+
+To rate an agent you dealt with:
+
+```sh
+npm run agent -- give-feedback AGENT_ID SCORE [TAG]
+```
+
+The agent signs the review with its own key: an integer score from 0 to 100, a short tag (default `interaction`), and a second tag recording whether the target was `verified` at that moment. The command refuses to rate this agent itself, and the registry rejects feedback from an agent's owner or approved operators. A review costs about 0.17 HBAR from the agent account. The template calls the registry with the ABI of its implementation (`0x16e0…da34`), whose deployed bytecode on Hedera is identical to the source-verified copy on Base Sepolia.
+
 ### MCP server
 
-`npm run agent -- mcp` starts a local stdio MCP server with `link_account`, `check_policy` and `record_outcome`. Run it in the project directory with the agent key file present. `link_account` verifies the account and stores a local ignored binding; `check_policy` is advisory; `record_outcome` checks mirror evidence before writing an HCS fill.
+`npm run agent -- mcp` starts a local stdio MCP server with `link_account`, `check_policy`, `record_outcome`, `resolve_agent` and `give_feedback`. Run it in the project directory with the agent key file present. `link_account` verifies the account and stores a local ignored binding; `check_policy` is advisory; `record_outcome` checks mirror evidence before writing an HCS fill; `resolve_agent` lets the agent check another agent before dealing with it; `give_feedback` rates another agent, signed by this one.
 
 ---
 
@@ -249,6 +271,8 @@ Run as `npm run agent -- <command>`.
 | `quote AMOUNT` / `quote-fallback AMOUNT`                           | Read-only SaucerSwap quotes                                                 |
 | `fund-dex TINYBARS` / `spend AMOUNT` / `configure-dex`             | DEX funding, policy-checked swap, route update                              |
 | `init` / `setup` / `register` / `adopt PUBLIC_DEPLOYMENT_JSON`     | Individual setup steps and reattaching an existing deployment               |
+| `lookup AGENT_ID`                                                  | Verify any agent by ERC-8004 ID and list its reviews (read-only)            |
+| `give-feedback AGENT_ID SCORE [TAG]`                               | Rate another agent 0–100 in the ERC-8004 reputation registry                |
 | `evidence`                                                         | Print the recorded testnet transaction links                                |
 | `mcp`                                                              | Start the local stdio MCP server                                            |
 
@@ -379,6 +403,10 @@ The recovery trial used [0.01 HBAR of operator funding](https://hashscan.io/test
 ### Second deployment from a fresh public scaffold
 
 [Agent account `0.0.10719538`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368400.901918984), [HCS topic `0.0.10719539`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368403.419699553), [policy `0.0.10719558`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368452.706297608), [ERC-8004 agent `122`](https://hashscan.io/testnet/transaction/0.0.5792828%401790368490.311414726), [paid standing](https://hashscan.io/testnet/transaction/0.0.7162784%401790368535.441608179), [guardian revocation](https://hashscan.io/testnet/transaction/0.0.10719536%401790368579.022184355) and [paid standing after revocation](https://hashscan.io/testnet/transaction/0.0.7162784%401790368604.066112463), which returned `agentKeyActive: false`. A live SAUCE → WHBAR quote succeeded between payment and revocation; the configured USDC swap failed before signing because no pool exists, and after revocation failed with `AGENT_KEY_INACTIVE`. This run used the published template at commit `7f7c412`. The same revoked agent was later reattached with `adopt` from another fresh scaffold without submitting a transaction.
+
+### Agent-to-agent lookup and review
+
+On 1 October 2026 the CLI agent (ERC-8004 `121`, account `0.0.10715883`) looked up the browser-set-up agent `125`, which verified, and [rated it 90 in the reputation registry](https://hashscan.io/testnet/transaction/0.0.10715883%401790844857.267883429) (`0.0.7919998`) with tags `identity-check` and `verified`. Reading the registry back returned one review, average 90, from `0.0.10715883`. A self-rating attempt by agent `121` was refused before any transaction was sent. Lookups of `121` and `124` also verified, including both agreement formats; agent `1`, which belongs to another project, was reported as an external card and not fetched.
 
 ### SaucerSwap
 

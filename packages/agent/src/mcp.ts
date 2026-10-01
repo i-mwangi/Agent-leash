@@ -10,6 +10,8 @@ import { readFacts, policySnapshot } from '../../shared/src/sources';
 import { checkPolicy } from './policyClient';
 import { publish } from './setup';
 import { roleKey } from './runtime';
+import { feedbackInput, giveFeedback } from './feedback';
+import { resolveAgent } from '../../shared/src/resolve';
 
 function deployment(){const d=readDeployment();if(!d?.agentAccount) throw new AppError('SETUP_REQUIRED');return d;}
 function answer(value:unknown){return {content:[{type:'text' as const,text:JSON.stringify(jsonSafe(value))}]};}
@@ -53,6 +55,12 @@ export function createAgentMcp() {
       const result=await publish(d,'fill',{status,transactionId,amount,asset:d.spendAsset,...(reason?{reason}:{})},'agent',`outcome-${id}-${status}`,store);
       return answer({transactionId,recordId:result.txId,status});
     }catch(error){return toolError(error);}finally{store.close();}
+  });
+  server.registerTool('resolve_agent',{description:'Look up any agent by ERC-8004 ID and verify its card, HCS records, account key, policy and agreement before dealing with it. Includes its reviews. Read-only.',inputSchema:{agentId:uint}},async({agentId})=>{
+    try {return answer(await resolveAgent(feedbackInput(agentId,'0').agentId));}catch(error){return toolError(error);}
+  });
+  server.registerTool('give_feedback',{description:'Rate another agent 0-100 in the ERC-8004 reputation registry, signed by this agent. Refuses to rate this agent itself.',inputSchema:{agentId:uint,score:z.string().regex(/^(100|[1-9]?\d)$/),tag:z.string().regex(/^[a-z0-9_-]{1,32}$/).optional()}},async({agentId,score,tag})=>{
+    try {return answer(await giveFeedback(agentId,score,tag));}catch(error){return toolError(error);}
   });
   return server;
 }
