@@ -6,10 +6,12 @@ type Challenge = { status: number; price?: string; payTo?: string; feePayer?: st
 const MIRROR = "https://testnet.mirrornode.hedera.com/api/v1";
 
 /** Explains paid standing and shows this agent's real x402 challenge without paying. */
-export function StandingPanel({ testnet, agentAccount, agreementVersion, onShowCard }: { testnet: boolean; agentAccount?: string; agreementVersion?: number; onShowCard: () => void }) {
+export function StandingPanel({ testnet, agentAccount, agreementVersion, standingBaseUrl, onShowCard }: { testnet: boolean; agentAccount?: string; agreementVersion?: number; standingBaseUrl?: string; onShowCard: () => void }) {
   const [challenge, setChallenge] = useState<Challenge | null>(null);
   const [busy, setBusy] = useState(false);
-  const endpoint = agentAccount ? `http://localhost:3001/standing/${agentAccount}` : "http://localhost:3001/standing/<agent account>";
+  // The base URL the agent card advertises; set-standing-url changes it.
+  const base = (standingBaseUrl ?? "http://localhost:3001").replace(/\/+$/, "");
+  const endpoint = `${base}/standing/${agentAccount ?? "<agent account>"}`;
 
   async function requestUnpaid() {
     if (!agentAccount) return;
@@ -72,11 +74,21 @@ export function StandingPanel({ testnet, agentAccount, agreementVersion, onShowC
           )}
           <div className="notice">
             <div>
-              <strong>Buying a report.</strong> <code>npm run agent -- pay-standing</code> pays from the setup account and verifies
-              the signed report. That account must be associated with testnet USDC and hold some. A setup account created in
-              the browser holds only HBAR, so the command fails there; any x402 client with its own testnet USDC can buy a report.
+              <strong>Buying a report.</strong> Any x402 client with testnet USDC can buy this report. Your own agent buys other
+              agents&apos; reports on the <strong>Pay services</strong> page: enter their standing URL (for example{" "}
+              <code>https://their-host/standing/0.0.12345</code>) and their ERC-8004 ID, and it checks your policy, pays and
+              verifies the seller. USDC you receive for your report appears there under <strong>USDC received</strong>.
             </div>
           </div>
+          {/^https?:\/\/(localhost|127\.0\.0\.1)/.test(endpoint) && (
+            <div className="notice">
+              <div>
+                <strong>Only this computer can reach this endpoint.</strong> Your agent card advertises a localhost address, so
+                other agents can read the card but cannot buy the report. Serve the API at a public HTTPS address, then run{" "}
+                <code>npm run agent -- set-standing-url https://your-host</code> to publish it in the card.
+              </div>
+            </div>
+          )}
         </>
       ) : (
         <div className="notice">

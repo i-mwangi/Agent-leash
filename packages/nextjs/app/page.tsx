@@ -34,7 +34,7 @@ const tabs = [
   "Optional DEX",
 ] as const;
 type Tab = (typeof tabs)[number];
-type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string;registry?:string;guardianMode?:'local'|'wallet'};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
+type LiveView={mode:string;deployment?:{agentAccount?:string;guardianId?:string;guardianPublicKey?:string;policyContractId?:string;hcsTopic?:string;uaid?:string;erc8004AgentId?:string;policyAddress?:string;spendAsset?:string;name?:string;registry?:string;standingBaseUrl?:string;guardianMode?:'local'|'wallet'};status?:{liveAdaptersReady:boolean;milestones:{name:string;ready:boolean}[]};agentKeyActive?:boolean;paused?:boolean;agreement?:{hash:string;version:number}};
 const units=(value:string)=>BigInt(value).toLocaleString('en-US');
 function usagePercent(s:Snapshot){const cap=BigInt(s.maxPerDay);return cap===0n?0:Number((BigInt(s.spentToday)*100n)/cap);}
 export default function Home() {
@@ -544,7 +544,7 @@ export default function Home() {
             );
           })()}
           {tab === "Standing" && (
-            <StandingPanel testnet={testnet} agentAccount={live?.deployment?.agentAccount} agreementVersion={live?.agreement?.version} onShowCard={() => setTab("Identity")} />
+            <StandingPanel testnet={testnet} agentAccount={live?.deployment?.agentAccount} agreementVersion={live?.agreement?.version} standingBaseUrl={live?.deployment?.standingBaseUrl} onShowCard={() => setTab("Identity")} />
           )}
           {tab === 'Pay services' && !testnet && <section className="panel detail">
             <h2>Pay for services with x402</h2>
