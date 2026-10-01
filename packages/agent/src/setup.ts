@@ -1,5 +1,5 @@
 import { AccountCreateTransaction, AccountUpdateTransaction, ContractCreateTransaction, ContractExecuteTransaction, ContractId, FileCreateTransaction, FileAppendTransaction, Hbar, KeyList, PrivateKey, PublicKey, TopicCreateTransaction, TopicMessageSubmitTransaction, TokenAssociateTransaction } from '@hiero-ledger/sdk';
-import { AbiCoder, Wallet, getBytes } from 'ethers';
+import { AbiCoder, Wallet, getBytes, keccak256, toUtf8Bytes } from 'ethers';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { ROOT, DATA, readDeployment, saveDeployment } from '../../shared/src/files';
@@ -127,6 +127,30 @@ export async function register() {
     await publish(d,'registered',{agentId:d.erc8004AgentId,registry:d.registry},'operator','hcs-registered',store);
     return d;
   });}finally{client.close();store.close();}
+}
+/** Normalize a public standing base URL: https (http only for loopback), no query, fragment or trailing slash. */
+export function standingBase(input:string) {
+  let url:URL;
+  try { url=new URL(input.trim()); } catch { throw new AppError('INVALID_STANDING_URL',400); }
+  const loopback=['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+  if(url.protocol!=='https:' && !(url.protocol==='http:' && loopback)) throw new AppError('STANDING_URL_MUST_BE_HTTPS',400);
+  if(url.search || url.hash || url.username || url.password) throw new AppError('INVALID_STANDING_URL',400);
+  return `${url.origin}${url.pathname.replace(/\/+$/,'')}`;
+}
+/** Point the agent card's standing service at a new base URL by updating the ERC-8004 registry entry. */
+export async function setStandingUrl(input:string) {
+  const base=standingBase(input);
+  const d=readDeployment();
+  if(!d?.agentAccount || !d.erc8004AgentId) throw new AppError('SETUP_REQUIRED');
+  if(d.standingBaseUrl===base) return {unchanged:true,standing:`${base}/standing/${d.agentAccount}`};
+  const next={...d,standingBaseUrl:base};
+  const store=new Store(resolve(DATA,'operator.sqlite')); const client=clientFor(d.operatorId,roleKey('operator'));
+  try {
+    // A distinct operation name per URL: the original card update must not be replayed from the store.
+    const result=await store.exclusive('register',()=>nativeOperation(`erc8004-card-url-${keccak256(toUtf8Bytes(base)).slice(2,18)}`,new ContractExecuteTransaction().setContractId(ContractId.fromEvmAddress(0,0,d.registry)).setGas(2_000_000).setFunctionParameters(getBytes(IDENTITY_ABI.encodeFunctionData('setAgentURI',[d.erc8004AgentId,cardUri(next)]))),client,store));
+    saveDeployment(next); // Only after the registry holds the new card.
+    return {transactionId:result.txId,standing:`${base}/standing/${d.agentAccount}`,note:'Restart npm run dev so the API serves standing under the new URL.'};
+  } finally {client.close();store.close();}
 }
 export async function guardianAction(action:'pause'|'unpause'|'revoke'|'restore'|'caps',caps?:[bigint,bigint]) {
   const d=readDeployment();if(!d?.agentAccount || !d.guardianId || !d.policyContractId) throw new AppError('SETUP_REQUIRED');

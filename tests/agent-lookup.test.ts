@@ -4,6 +4,7 @@ import { Mirror } from '../packages/shared/src/mirror';
 import { IDENTITY_ABI } from '../packages/shared/src/sources';
 import { REPUTATION_ABI, formatFixed, parseCardUri, readReputation, resolveAgent } from '../packages/shared/src/resolve';
 import { feedbackInput } from '../packages/agent/src/feedback';
+import { standingBase } from '../packages/agent/src/setup';
 import { createApp } from '../packages/server/src/app';
 
 const dataUri=(card:object)=>'data:application/json;base64,'+Buffer.from(JSON.stringify(card)).toString('base64');
@@ -81,6 +82,15 @@ describe('feedback input',()=>{
     expect(feedbackInput('125','90','identity-check')).toEqual({agentId:125n,score:90n,tag:'identity-check'});
     expect(feedbackInput('1','0').tag).toBe('interaction');
     for(const [id,score,tag] of [['0','50'],['12a','50'],['5','101'],['5','-1'],['5','9.5'],['5','50','Bad Tag']]) expect(()=>feedbackInput(id,score,tag)).toThrow();
+  });
+});
+
+describe('standing URL',()=>{
+  it('accepts https or loopback http and normalizes the base',()=>{
+    expect(standingBase('https://agent.example.org/')).toBe('https://agent.example.org');
+    expect(standingBase(' https://example.org/agents/atlas// ')).toBe('https://example.org/agents/atlas');
+    expect(standingBase('http://localhost:3001')).toBe('http://localhost:3001');
+    for(const bad of ['http://agent.example.org','ftp://x.org','not a url','https://x.org/?a=1','https://x.org/#f','https://u:p@x.org']) expect(()=>standingBase(bad)).toThrow();
   });
 });
 

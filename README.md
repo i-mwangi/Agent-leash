@@ -160,7 +160,7 @@ Each integration carries part of the template's job. Removing any of the first f
 
 | Integration                      | What it does here                                                                                                                                      | Why the template needs it                                                                                                                                      | Live evidence                                                                                                                                                                |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **x402 + Blocky402**             | Sells the signed standing report: `402 Payment Required`, Blocky402 verifies and settles 0.001 USDC, the API confirms the exact transfer on the mirror | Standing is how a counterparty checks the agent before trusting it; x402 makes that check payable by another agent over plain HTTP, with no account or API key | [Paid standing](#cli-deployment-2527-september-2026), [version 2](#cli-deployment-2527-september-2026) and [version 3](#vaults) reports                                    |
+| **x402 + Blocky402**             | Sells the signed standing report: `402 Payment Required`, Blocky402 verifies and settles 0.001 USDC, the API confirms the exact transfer on the mirror | Standing is how a counterparty checks the agent before trusting it; x402 makes that check payable by another agent over plain HTTP, with no account or API key | [Paid standing](#cli-deployment-2527-september-2026), [version 2](#cli-deployment-2527-september-2026) and [version 3](#vaults) reports                                      |
 | **ERC-8004 identity registry**   | Registers each agent; its card names the account, guardian, HCS topic, UAID, policy and standing endpoint; lookups verify any agent from it            | The shared directory where other agents find this one and see who answers for it                                                                               | Agents [121](https://hashscan.io/testnet/transaction/0.0.5792828%401790349275.514184066), [125](https://hashscan.io/testnet/transaction/0.0.10798471%401790805543.885864012) |
 | **ERC-8004 reputation registry** | Agents rate agents they dealt with; every lookup lists the reviews with their reviewers                                                                | Turns individual checks into a shared track record; the registry blocks owners from rating their own agent                                                     | [First review](#agent-to-agent-lookup-and-review)                                                                                                                            |
 | **HashPack (WalletConnect)**     | The guardian approves setup and signs pause, unpause and vault controls; the guardian key never leaves the wallet                                      | Puts a human in control without the template ever holding the guardian's key                                                                                   | [HashPack setup run](#browser-setup), [vault controls](#vaults)                                                                                                              |
@@ -347,6 +347,7 @@ Run as `npm run agent -- <command>`.
 | `quote AMOUNT` / `quote-fallback AMOUNT`                           | Read-only SaucerSwap quotes                                                 |
 | `fund-dex TINYBARS` / `spend AMOUNT` / `configure-dex`             | DEX funding, policy-checked swap, route update                              |
 | `init` / `setup` / `register` / `adopt PUBLIC_DEPLOYMENT_JSON`     | Individual setup steps and reattaching an existing deployment               |
+| `set-standing-url HTTPS_URL`                                       | Publish a reachable standing base URL in the agent's ERC-8004 card          |
 | `lookup AGENT_ID`                                                  | Verify any agent by ERC-8004 ID and list its reviews (read-only)            |
 | `give-feedback AGENT_ID SCORE [TAG]`                               | Rate another agent 0–100 in the ERC-8004 reputation registry                |
 | `evidence`                                                         | Print the recorded testnet transaction links                                |
@@ -368,7 +369,13 @@ Run as `npm run agent -- <command>`.
 
 All role files and `.accountable/` are ignored by git; keep them out of GitHub. To run the API alone in strict testnet mode: PowerShell `$env:APP_MODE='testnet'; npm run dev -w @accountable/server`, Bash `APP_MODE=testnet npm run dev -w @accountable/server`. Strict mode verifies the account, HCS, registry, policy, facilitator support and payment token association, and fails before serving if a source is unavailable.
 
-The agent card's default standing endpoint is `localhost:3001`, for local development only. Set a reachable URL before registration to offer a public paid endpoint.
+The agent card's default standing endpoint is `localhost:3001`, which only this computer can reach: other agents can read the card but not buy a report. To publish a reachable endpoint, serve the API at a public HTTPS address (for example a tunnel to port 3001) and run:
+
+```sh
+npm run agent -- set-standing-url https://your-public-host
+```
+
+It rewrites the card in the ERC-8004 registry from the setup account (about 0.9 HBAR) and saves the new base URL locally only after the registry update succeeds; restart `npm run dev` so the 402 challenge advertises it. Use an address that stays stable: the card keeps pointing at it after a tunnel closes. This command is covered by local tests; it has not yet been run against testnet.
 
 ---
 
