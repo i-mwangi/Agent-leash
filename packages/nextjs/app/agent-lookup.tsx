@@ -109,16 +109,61 @@ export function OwnReputation({ agentId }: { agentId: string }) {
   );
 }
 
+type Registration = { agentId: string; owner: string; ownerAccount: string | null; registeredAt: string };
+
+/** Agents registered recently, read from the registry's public events; each can be verified. */
+function RecentAgents({ ownAgentId, onVerify, busy }: { ownAgentId?: string; onVerify: (id: string) => void; busy: boolean }) {
+  const [recent, setRecent] = useState<{ days: number; agents: Registration[]; truncated: boolean } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    fetch("/api/agents/recent", { cache: "no-store" })
+      .then(async response => { if (!response.ok) throw new Error("Registry events unavailable"); return response.json(); })
+      .then(value => { if (active) setRecent(value); })
+      .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : "Registry events unavailable"); });
+    return () => { active = false; };
+  }, []);
+  return (
+    <>
+      <h4>Recently registered agents</h4>
+      <p>
+        Every registration in the ERC-8004 registry emits a public event, so anyone can list new agents. These are the
+        registrations from the last {recent?.days ?? 6} days on Hedera testnet; verify one before trusting it.
+      </p>
+      {error && <div className="notice"><div>{error}</div></div>}
+      {!recent && !error && <p>Reading registry events…</p>}
+      {recent && recent.agents.length === 0 && <p>No agents registered in this window.</p>}
+      {recent && recent.agents.length > 0 && (
+        <table className="card-table">
+          <tbody>
+            {recent.agents.map(agent => (
+              <tr key={agent.agentId}>
+                <th>#{agent.agentId}{agent.agentId === ownAgentId && <em className="mine">yours</em>}</th>
+                <td>
+                  Registered {new Date(Number(agent.registeredAt.split(".")[0]) * 1000).toLocaleString()} by{" "}
+                  {agent.ownerAccount ? hashscan("account", agent.ownerAccount) : <code>{agent.owner}</code>}
+                  <small><button className="text-link" disabled={busy} onClick={() => onVerify(agent.agentId)}>Verify</button></small>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {recent?.truncated && <p>Showing the newest registrations only.</p>}
+    </>
+  );
+}
+
 /** Look up and verify any agent by its ERC-8004 ID before dealing with it. */
-export function AgentLookup() {
+export function AgentLookup({ ownAgentId }: { ownAgentId?: string }) {
   const [id, setId] = useState("");
   const [result, setResult] = useState<Resolution | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  async function run() {
-    if (!/^[1-9]\d{0,30}$/.test(id.trim())) { setError("Enter an ERC-8004 agent ID, for example 121"); setResult(null); return; }
-    setBusy(true); setError(null); setResult(null);
-    try { setResult(await lookup(id.trim())); } catch (reason) { setError(reason instanceof Error ? reason.message : "Lookup failed"); } finally { setBusy(false); }
+  async function run(target = id) {
+    if (!/^[1-9]\d{0,30}$/.test(target.trim())) { setError("Enter an ERC-8004 agent ID, for example 121"); setResult(null); return; }
+    setId(target.trim()); setBusy(true); setError(null); setResult(null);
+    try { setResult(await lookup(target.trim())); } catch (reason) { setError(reason instanceof Error ? reason.message : "Lookup failed"); } finally { setBusy(false); }
   }
   return (
     <div className="agent-card-view">
@@ -135,6 +180,7 @@ export function AgentLookup() {
       </form>
       {error && <div className="notice"><div>{error}</div></div>}
       {result && <Result result={result} />}
+      <RecentAgents ownAgentId={ownAgentId} busy={busy} onVerify={agentId => void run(agentId)} />
       <p className="boundary-note">
         To rate an agent you dealt with, run <code>npm run agent -- give-feedback AGENT_ID SCORE [TAG]</code>: your agent signs the
         review with its own key. The same lookup and rating are available to the AI agent as the <code>resolve_agent</code> and

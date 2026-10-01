@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Interface } from 'ethers';
 import { Mirror } from '../packages/shared/src/mirror';
 import { IDENTITY_ABI } from '../packages/shared/src/sources';
-import { REPUTATION_ABI, formatFixed, parseCardUri, readReputation, resolveAgent } from '../packages/shared/src/resolve';
+import { REPUTATION_ABI, formatFixed, longZeroAccount, parseCardUri, readReputation, recentRegistrations, resolveAgent } from '../packages/shared/src/resolve';
 import { feedbackInput } from '../packages/agent/src/feedback';
 import { standingBase } from '../packages/agent/src/setup';
 import { recentFills } from '../packages/shared/src/fills';
@@ -83,6 +83,33 @@ describe('feedback input',()=>{
     expect(feedbackInput('125','90','identity-check')).toEqual({agentId:125n,score:90n,tag:'identity-check'});
     expect(feedbackInput('1','0').tag).toBe('interaction');
     for(const [id,score,tag] of [['0','50'],['12a','50'],['5','101'],['5','-1'],['5','9.5'],['5','50','Bad Tag']]) expect(()=>feedbackInput(id,score,tag)).toThrow();
+  });
+});
+
+describe('recent registrations',()=>{
+  it('decodes Registered events, newest first, and maps long-zero owners to accounts',async()=>{
+    const topic=IDENTITY_ABI.getEvent('Registered')!.topicHash;
+    const pad=(hex:string)=>'0x'+hex.replace(/^0x/,'').padStart(64,'0');
+    const requested:string[]=[];
+    const mirror=new Mirror(async url=>{
+      requested.push(String(url));
+      return Response.json({logs:[
+        {topics:[topic,pad('7d'),pad('a4c587')],timestamp:'1790805550.430480053'},
+        {topics:[topic,pad('79'),pad('c560e9f7fb38b5efcbb507f42e7c1613a9fb164c')],timestamp:'1790349281.598836031'},
+      ],links:{next:null}});
+    });
+    const result=await recentRegistrations(mirror,6,1790900000000);
+    expect(result.agents).toEqual([
+      {agentId:'125',owner:'0x0000000000000000000000000000000000A4C587',ownerAccount:'0.0.10798471',registeredAt:'1790805550.430480053'},
+      {agentId:'121',owner:'0xC560e9F7FB38b5EfcbB507F42E7c1613A9FB164C',ownerAccount:null,registeredAt:'1790349281.598836031'},
+    ]);
+    expect(requested[0]).toContain(`topic0=${topic}`);
+    expect(requested[0]).toContain('timestamp=gte:1790381600');
+    await expect(recentRegistrations(mirror,7)).rejects.toThrow('INVALID_WINDOW');
+  });
+  it('maps only long-zero EVM addresses to account IDs',()=>{
+    expect(longZeroAccount('0x0000000000000000000000000000000000a4c587')).toBe('0.0.10798471');
+    expect(longZeroAccount('0xc560e9f7fb38b5efcbb507f42e7c1613a9fb164c')).toBeNull();
   });
 });
 

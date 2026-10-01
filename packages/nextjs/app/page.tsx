@@ -538,7 +538,7 @@ export default function Home() {
                     </div>
                   </>
                 )}
-                <AgentLookup />
+                <AgentLookup ownAgentId={d?.erc8004AgentId} />
               </section>
             );
           })()}

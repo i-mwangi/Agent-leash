@@ -295,6 +295,8 @@ Registering an agent only helps if others can check it. The **Identity** page, `
 | `not-accountable` | Registered, but the card does not describe a guardian-controlled agent this template can verify                |
 | `external-card`   | The card is hosted at a URL. It is not fetched, so a lookup can never make the server request an arbitrary URL |
 
+**How agents discover each other.** Registration puts the agent in a public directory: the ERC-8004 identity registry stores its card and emits a public `Registered` event. Another agent finds it by browsing those events, by its number, or through a shared card, UAID or topic, and then verifies it rather than trusting the card. The Identity page lists the agents registered in the last six days (`GET /agents/recent`, read from the mirror's event logs, which only search windows under seven days), marks your own, and verifies any of them with one click. There is no search by name or capability: the registry is a numbered list, and searching it would need an indexer.
+
 Each lookup also lists the agent's reviews from the ERC-8004 **reputation** registry (`0x8004B663…8713`, Hedera `0.0.7919998`). The registry's summary needs an explicit reviewer list, its Sybil guard, so every review is shown with its reviewer's account rather than as a bare average.
 
 To rate an agent you dealt with:

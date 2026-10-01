@@ -72,6 +72,34 @@ export async function readReputation(agentId:bigint,mirror:Mirror) {
   return {count:Number(summary[0]),average:Number(summary[0])?formatFixed(BigInt(summary[1]),Number(summary[2])):null,reviews};
 }
 
+/** A Hedera long-zero EVM address maps to its account ID; an alias address does not. */
+export function longZeroAccount(evm:string) {
+  const hex=evm.toLowerCase().replace(/^0x/,'');
+  return /^0{24}[0-9a-f]{16}$/.test(hex)?`0.0.${BigInt('0x'+hex.slice(24))}`:null;
+}
+
+/**
+ * Agents registered recently, newest first, from the registry's public Registered events. The
+ * mirror only searches event logs within a window shorter than seven days; pages are capped.
+ */
+export async function recentRegistrations(mirror=new Mirror(),days=6,now=Date.now(),maxPages=5) {
+  if(!(days>0 && days<7)) throw new AppError('INVALID_WINDOW',400);
+  const topic=IDENTITY_ABI.getEvent('Registered')!.topicHash;
+  const to=Math.floor(now/1000),from=to-Math.floor(days*86400);
+  let path:string|null=`/api/v1/contracts/${IDENTITY_REGISTRY}/results/logs?topic0=${topic}&timestamp=gte:${from}&timestamp=lte:${to}&order=desc&limit=100`;
+  const agents:{agentId:string;owner:string;ownerAccount:string|null;registeredAt:string}[]=[];
+  for(let page=0;path && page<maxPages;page++) {
+    const body:{logs:{topics:string[];timestamp:string}[];links:{next:string|null}}=await mirror.json(path);
+    for(const log of body.logs) {
+      if(log.topics.length<3) continue;
+      const owner=getAddress('0x'+log.topics[2].slice(-40));
+      agents.push({agentId:BigInt(log.topics[1]).toString(),owner,ownerAccount:longZeroAccount(owner),registeredAt:log.timestamp});
+    }
+    path=body.links.next;
+  }
+  return {days,agents,truncated:!!path};
+}
+
 export type Resolution=Awaited<ReturnType<typeof resolveAgent>>;
 
 /**

@@ -1024,3 +1024,13 @@ code.command {
   text-transform: uppercase;
   color: #8a9384;
 }
+
+.card-table em.mine {
+  font-style: normal;
+  font-size: 11px;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #e6efe0;
+  color: #2f5d3a;
+}

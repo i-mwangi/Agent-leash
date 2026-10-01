@@ -4,7 +4,7 @@ import type { LiveServices } from './live';
 import { AppError, uint, jsonSafe } from '../../shared/src/model';
 import { readDeployment } from '../../shared/src/files';
 import { fallbackQuote, quote, policySnapshot } from '../../shared/src/sources';
-import { resolveAgent } from '../../shared/src/resolve';
+import { recentRegistrations, resolveAgent } from '../../shared/src/resolve';
 import { recentFills } from '../../shared/src/fills';
 import type { ConsensusEvent } from '../../shared/src/model';
 import { Mirror } from '../../shared/src/mirror';
@@ -122,6 +122,8 @@ export function createApp(modeInput:string|(()=>string) = "demo", services:()=>L
     const facts=await live.ready(live.deployment.agentAccount??'') as {events:ConsensusEvent[]};
     return c.json(jsonSafe(await recentFills(live.deployment,facts.events,live.mirror)));
   });
+  // Registered before /agents/:agentId so "recent" is not read as an agent ID.
+  app.get('/agents/recent',async c=>c.json(await recentRegistrations(services()?.mirror??new Mirror())));
   // Public, read-only lookup of any agent; works before setup because it needs only the mirror.
   app.get('/agents/:agentId',async c=>{
     const id=c.req.param('agentId');
