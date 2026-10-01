@@ -95,7 +95,7 @@ function VenueComparison() {
 /** Ask the agent to swap now or at a set time, and follow what it scheduled. */
 function DirectAgent({ token, guardianId, onChanged }: { token: Token | null; guardianId?: string; onChanged: () => void }) {
   const [state, setState] = useState<AgentState | null>(null);
-  const [offline, setOffline] = useState(false);
+  const [offline, setOffline] = useState<false | "down" | "outdated">(false);
   const [amount, setAmount] = useState("0.5");
   const [mode, setMode] = useState<"now" | "later">("now");
   const [at, setAt] = useState(() => localInput(new Date(Date.now() + 10 * 60_000)));
@@ -104,7 +104,8 @@ function DirectAgent({ token, guardianId, onChanged }: { token: Token | null; gu
 
   const refresh = useCallback(async () => {
     try { setState(await runtime<AgentState>("agent")); setOffline(false); }
-    catch { setOffline(true); }
+    // A runtime started before this page existed answers setup routes but not agent ones.
+    catch (reason) { setOffline(reason instanceof Error && reason.message === "AGENT_RUNTIME_404" ? "outdated" : "down"); }
   }, []);
   useEffect(() => { void refresh(); }, [refresh]);
   // While the agent works, follow it; afterwards refresh the swap history once.
@@ -157,8 +158,9 @@ function DirectAgent({ token, guardianId, onChanged }: { token: Token | null; gu
     <>
       <h3 className="dex-heading">Direct the agent</h3>
       <div className="notice"><div>
-        The local agent runtime is not answering, so the dashboard cannot pass tasks to the agent. Start everything with
-        <code className="command">npm run dev</code>, or use the CLI in the project folder:
+        {offline === "outdated"
+          ? <>The local agent runtime is running code from before these controls existed. Stop <code className="command">npm run dev</code> (Ctrl+C) and start it again, then reload this page. Or use the CLI in the project folder:</>
+          : <>The local agent runtime is not answering, so the dashboard cannot pass tasks to the agent. Start everything with <code className="command">npm run dev</code>, or use the CLI in the project folder:</>}
         <code className="command">npm run agent -- spend 500000</code>
         <code className="command">npm run agent -- schedule-swap 500000 2026-10-02T09:00:00Z</code>
       </div></div>
