@@ -1,4 +1,4 @@
-import { AccountCreateTransaction, AccountUpdateTransaction, ContractCreateTransaction, ContractExecuteTransaction, ContractId, FileCreateTransaction, FileAppendTransaction, Hbar, KeyList, PrivateKey, PublicKey, TopicCreateTransaction, TopicMessageSubmitTransaction, TokenAssociateTransaction } from '@hiero-ledger/sdk';
+import { AccountCreateTransaction, AccountUpdateTransaction, ContractCreateTransaction, ContractExecuteTransaction, ContractId, FileCreateTransaction, FileAppendTransaction, Hbar, KeyList, PrivateKey, PublicKey, TopicCreateTransaction, TopicMessageSubmitTransaction, TokenAssociateTransaction, TransferTransaction } from '@hiero-ledger/sdk';
 import { AbiCoder, Wallet, getBytes, keccak256, toUtf8Bytes } from 'ethers';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -190,6 +190,18 @@ export async function configureDex() {
     }
     d.spendAsset=FALLBACK.assetIn;d.outputAsset=FALLBACK.assetOut;saveDeployment(d);return d;
   });}finally{store.close();}
+}
+/** Send operator HBAR to the agent account for network fees; the agent pays for its own swaps and records. */
+export async function fundAgent(tinybars:bigint) {
+  if(tinybars<=0n || tinybars>1_000_000_000n) throw new AppError('FUND_AMOUNT_OUT_OF_RANGE',400);
+  const d=readDeployment();if(!d?.agentAccount) throw new AppError('SETUP_REQUIRED');
+  const client=clientFor(d.operatorId,roleKey('operator'));const store=new Store(resolve(DATA,'operator.sqlite'));
+  try {return await store.exclusive('fund-agent',async()=>{
+    const amount=Hbar.fromTinybars(tinybars.toString());
+    const result=await nativeOperation(`fund-agent-${tinybars}-${Date.now()}`,new TransferTransaction().addHbarTransfer(d.operatorId,amount.negated()).addHbarTransfer(d.agentAccount!,amount),client,store);
+    const balance=(await new Mirror().account(d.agentAccount!)).balance.balance;
+    return {transactionId:result.txId,agentAccount:d.agentAccount,sentTinybars:tinybars.toString(),agentHbarTinybars:String(balance)};
+  });}finally{client.close();store.close();}
 }
 /** Buy testnet SAUCE for the agent with operator HBAR; separate from the agent's policy-checked spend. */
 export async function fundDex(tinybars:bigint) {

@@ -544,7 +544,7 @@ export default function Home() {
             <h2>Optional SaucerSwap testnet route</h2>
             <p>After setup, this page reads a live SAUCE → WHBAR quote from SaucerSwap on Hedera testnet. The agent's own swaps are checked against its policy before it signs.</p>
           </section>}
-          {tab === 'Optional DEX' && live?.mode==='testnet' && <DexPanel hcsTopic={live.deployment?.hcsTopic} guardianId={live.deployment?.guardianId} />}
+          {tab === 'Optional DEX' && live?.mode==='testnet' && <DexPanel hcsTopic={live.deployment?.hcsTopic} agentAccount={live.deployment?.agentAccount} guardianId={live.deployment?.guardianId} />}
           {tab === "Overview" && <section className="roadmap">
             <div className="panel-title">
               <h2>From scaffold to accountable agent</h2>

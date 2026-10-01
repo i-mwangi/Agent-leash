@@ -22,5 +22,10 @@ export const REASON_TEXT:Record<string,string>={
   SWAP_UNCONFIRMED:'The mirror did not show the expected token movement, so the swap is not reported as done.',
   SCHEDULE_NOT_PENDING:'This scheduled swap has already executed, expired or been cancelled.',
   SETUP_REQUIRED:'Finish agent setup first.',
+  INSUFFICIENT_PAYER_BALANCE:'When Hedera ran the swap, the agent account did not have enough HBAR to pay the network fee. No tokens moved and the amount went back to the daily limit.',
+  SCHEDULE_EXPIRED:'The schedule reached its time without executing.',
+  CANCELLED_FROM_DASHBOARD:'Cancelled from the dashboard before it executed.',
+  CANCELLED_BY_AGENT:'Cancelled by the agent before it executed.',
+  GAS_PRICE_UNAVAILABLE:'The current gas price could not be read, so the agent refuses rather than guess its fees.',
   API_UNAVAILABLE:'The local API did not answer; check that npm run dev is running.',
 };

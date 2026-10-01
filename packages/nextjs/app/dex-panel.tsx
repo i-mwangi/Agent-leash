@@ -16,7 +16,13 @@ type Venues = { amountIn: string; readAt: string; venues: ({ ok: true; quote: Ve
 const SETUP_HEADERS = { "x-accountable-setup": "1", "Content-Type": "application/json" };
 const hashscan = (kind: "transaction" | "schedule" | "topic", id: string) => `https://hashscan.io/testnet/${kind}/${encodeURIComponent(id)}`;
 const when = (consensus: string) => new Date(Number(consensus.split(".")[0]) * 1000).toLocaleString();
-const explain = (code: string) => REASON_TEXT[code] ? `${code}: ${REASON_TEXT[code]}` : code;
+const explain = (code: string) => {
+  const [base, detail] = code.split(":");
+  if (base === "AGENT_HBAR_LOW" && detail && /^\d+$/.test(detail)) return `${base}: the agent needs at least ${tokenAmount(detail, 8)} HBAR for network fees. Send it HBAR, then try again.`;
+  return REASON_TEXT[base] ? `${base}: ${REASON_TEXT[base]}` : code;
+};
+/** Below this the agent cannot pay for even a swap it already scheduled (300,000 gas at testnet prices plus margin). */
+const LOW_HBAR = 35_000_000n;
 
 /** Value for a datetime-local input, in the browser's time zone. */
 function localInput(date: Date) {
@@ -93,7 +99,8 @@ function VenueComparison() {
 }
 
 /** Ask the agent to swap now or at a set time, and follow what it scheduled. */
-function DirectAgent({ token, guardianId, onChanged }: { token: Token | null; guardianId?: string; onChanged: () => void }) {
+function DirectAgent({ token, agentAccount, guardianId, onChanged }: { token: Token | null; agentAccount?: string; guardianId?: string; onChanged: () => void }) {
+  const [hbar, setHbar] = useState<bigint | null>(null);
   const [state, setState] = useState<AgentState | null>(null);
   const [offline, setOffline] = useState<false | "down" | "outdated">(false);
   const [amount, setAmount] = useState("0.5");
@@ -103,10 +110,14 @@ function DirectAgent({ token, guardianId, onChanged }: { token: Token | null; gu
   const [guardianMessage, setGuardianMessage] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (agentAccount) fetch(`https://testnet.mirrornode.hedera.com/api/v1/accounts/${agentAccount}`, { cache: "no-store" })
+      .then(response => response.ok ? response.json() as Promise<{ balance: { balance: number } }> : null)
+      .then(account => { if (account) setHbar(BigInt(account.balance.balance)); })
+      .catch(() => undefined);
     try { setState(await runtime<AgentState>("agent")); setOffline(false); }
     // A runtime started before this page existed answers setup routes but not agent ones.
     catch (reason) { setOffline(reason instanceof Error && reason.message === "AGENT_RUNTIME_404" ? "outdated" : "down"); }
-  }, []);
+  }, [agentAccount]);
   useEffect(() => { void refresh(); }, [refresh]);
   // While the agent works, follow it; afterwards refresh the swap history once.
   useEffect(() => {
@@ -176,6 +187,13 @@ function DirectAgent({ token, guardianId, onChanged }: { token: Token | null; gu
         agent checks your policy before it signs. A scheduled swap is signed now and executed by Hedera itself at the
         chosen time, using the Hedera Schedule Service.
       </p>
+      {hbar !== null && (
+        <p className={hbar < LOW_HBAR ? "notice" : undefined}>
+          <span>Agent HBAR for network fees: <strong>{tokenAmount(hbar.toString(), 8)} HBAR</strong>.
+            {hbar < LOW_HBAR && <> That is too little to pay for a swap; a scheduled swap would fail at execution with INSUFFICIENT_PAYER_BALANCE. Send HBAR to {agentAccount} from HashPack, or run <code className="command">npm run agent -- fund-agent 300000000</code> to send 3 HBAR from the setup account.</>}
+            {hbar >= LOW_HBAR && <> A swap costs about 0.1 HBAR; scheduling one costs about 1.1 HBAR more.</>}</span>
+        </p>
+      )}
       <form className="dex-task" onSubmit={event => { event.preventDefault(); void submit(); }}>
         <div className="amount-field">
           <input value={amount} onChange={event => setAmount(event.target.value)} inputMode="decimal" aria-label="Amount to swap" />
@@ -210,6 +228,7 @@ function DirectAgent({ token, guardianId, onChanged }: { token: Token | null; gu
                 <th>{new Date(s.execute_at).toLocaleString()}</th>
                 <td>
                   {amountText(s.amount)} · <strong>{s.status}</strong>{s.reason && ` (${s.reason})`}
+                  {s.reason && REASON_TEXT[s.reason] && <small>{REASON_TEXT[s.reason]}</small>}
                   <small>
                     <a href={hashscan("schedule", s.schedule_id)} target="_blank" rel="noreferrer">schedule {s.schedule_id}</a>
                     {s.status === "pending" && <> · <button className="link" type="button" disabled={!!task?.running} onClick={() => void cancel(s.schedule_id)}>Cancel (agent)</button>
@@ -233,7 +252,7 @@ function DirectAgent({ token, guardianId, onChanged }: { token: Token | null; gu
 }
 
 /** The agent on Hedera's exchanges: price discovery across venues, swaps on demand or on a schedule, and its record. */
-export function DexPanel({ hcsTopic, guardianId }: { hcsTopic?: string; guardianId?: string }) {
+export function DexPanel({ hcsTopic, agentAccount, guardianId }: { hcsTopic?: string; agentAccount?: string; guardianId?: string }) {
   const [fills, setFills] = useState<Fills | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -262,7 +281,7 @@ export function DexPanel({ hcsTopic, guardianId }: { hcsTopic?: string; guardian
       </p>
 
       <VenueComparison />
-      <DirectAgent token={fills?.spendToken ?? null} guardianId={guardianId} onChanged={loadFills} />
+      <DirectAgent token={fills?.spendToken ?? null} agentAccount={agentAccount} guardianId={guardianId} onChanged={loadFills} />
 
       <h3 className="dex-heading">Swap record on HCS</h3>
       {error && <div className="notice"><div>{error}</div></div>}

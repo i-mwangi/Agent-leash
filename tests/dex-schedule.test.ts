@@ -136,3 +136,16 @@ describe('agent tasks from the dashboard',()=>{
     expect(calls).toEqual(['swap:500000','schedule:1:2026-10-02T00:00:00Z']);
   });
 });
+
+describe('agent fee reserve',()=>{
+  it('covers the full gas limits Hedera reserves, plus schedule creation when scheduling',async()=>{
+    const { hbarNeeded, gasPrice } = await import('../packages/shared/src/fees');
+    expect(hbarNeeded(81n,{approve:false,schedule:false})).toBe(300_000n*81n+10_000_000n);
+    expect(hbarNeeded(81n,{approve:true,schedule:true})).toBe(1_000_000n*81n+300_000n*81n+120_000_000n+10_000_000n);
+    // The failing testnet schedule had 0.31 HBAR left; a new schedule now needs about 1.6 HBAR up front.
+    expect(hbarNeeded(81n,{approve:false,schedule:true})>31_000_000n).toBe(true);
+    const mirror=new Mirror(async()=>Response.json({fees:[{gas:81,transaction_type:'ContractCall'}]}));
+    expect(await gasPrice(mirror)).toBe(81n);
+    await expect(gasPrice(new Mirror(async()=>Response.json({fees:[]})))).rejects.toThrow('GAS_PRICE_UNAVAILABLE');
+  });
+});

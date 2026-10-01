@@ -6,6 +6,7 @@ import { AppError, entityId, evmAddress, type Deployment } from '../../shared/sr
 import { Mirror, exactUnits, mirrorTxId } from '../../shared/src/mirror';
 import { Store, type ScheduleRow } from '../../shared/src/store';
 import { policySnapshot, quote, ROUTER_ABI } from '../../shared/src/sources';
+import { GAS, requireHbar } from '../../shared/src/fees';
 import { checkPolicy, guardedSign, type PolicySnapshot } from './policyClient';
 import { clientFor, nativeOperation, roleKey } from './runtime';
 import { publish } from './setup';
@@ -73,16 +74,18 @@ export async function scheduleSwap(amount:bigint,executeAtInput:string) {
     // The router must still be allowed to move every pending scheduled amount when each one executes.
     const needed=store.scheduledOutstanding(d.spendAsset)+amount;
     const allowance=BigInt((await mirror.call(evmAddress(d.spendAsset),TOKEN_ABI,'allowance',[account,router]))[0]);
+    // Fees come from the agent's own HBAR; refuse before signing anything it could not finish.
+    await requireHbar(mirror,d.agentAccount!,{approve:allowance<needed,schedule:true});
     if(allowance<needed) {
       await guardedSign(read,d.spendAsset,amount,()=>nativeOperation(`approve-${d.spendAsset}-${needed}-${Date.now()}`,new ContractExecuteTransaction()
-        .setContractId(d.spendAsset).setGas(1_000_000)
+        .setContractId(d.spendAsset).setGas(Number(GAS.approve))
         .setFunctionParameters(getBytes(TOKEN_ABI.encodeFunctionData('approve',[router,needed]))),client,store));
       const fresh=BigInt((await mirror.call(evmAddress(d.spendAsset),TOKEN_ABI,'allowance',[account,router]))[0]);
       if(fresh<needed) throw new AppError('ALLOWANCE_UNCONFIRMED');
     }
     const minimum=scheduledMinimum(BigInt(estimate.amountOut));
     const deadline=BigInt(Math.floor(executeAt.getTime()/1000)+600);
-    const swap=new ContractExecuteTransaction().setContractId(d.routerId).setGas(1_500_000)
+    const swap=new ContractExecuteTransaction().setContractId(d.routerId).setGas(Number(GAS.swap))
       .setFunctionParameters(getBytes(ROUTER_ABI.encodeFunctionData('swapExactTokensForTokens',[amount,minimum,[d.spendAsset,d.outputAsset].map(evmAddress),account,deadline])));
     // Either the guardian or the agent can delete the schedule before it executes.
     const admin=new KeyList([PublicKey.fromStringECDSA(d.guardianPublicKey),key.publicKey],1);
