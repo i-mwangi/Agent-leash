@@ -68,8 +68,10 @@ export function InferenceSettings({ onSaved }: { onSaved: () => void }) {
         setApiKey(""); setSettings(saved); onSaved();
         setMessage("Saved to .env.server. Use Test to check the key with one short request.");
       } else if (action === "test") {
-        const result = await call<{ provider: string; model: string; answer: string; usage: { inputTokens: number | null; outputTokens: number | null } }>("POST", "/test");
-        setMessage(`${result.provider} (${result.model}) answered: “${result.answer}” (${result.usage.inputTokens ?? "?"} input, ${result.usage.outputTokens ?? "?"} output tokens, billed to your provider account)`);
+        const result = await call<{ ok: true; provider: string; model: string; answer: string; usage: { inputTokens: number | null; outputTokens: number | null } } | { ok: false; provider: string; model: string; error: string; providerMessage: string | null }>("POST", "/test");
+        setMessage(result.ok
+          ? `${result.provider} (${result.model}) answered: “${result.answer}” (${result.usage.inputTokens ?? "?"} input, ${result.usage.outputTokens ?? "?"} output tokens, billed to your provider account)`
+          : `${result.provider} refused the request (${result.error.replace("INFERENCE_UPSTREAM_", "HTTP ")}): ${result.providerMessage ?? "no reason given"}. Buyers are not charged while this fails.`);
       } else {
         setSettings(await call<Settings>("DELETE")); onSaved();
         setMessage("Provider removed from .env.server. The endpoint now answers 503 and charges nothing.");

@@ -66,6 +66,13 @@ describe('provider settings from the dashboard',()=>{
     saveInferenceSettings({provider:'anthropic',apiKey:'sk-ant-12345678',model:'claude-haiku-4-5',price:'10000'},dir);
     const result=await testInferenceSettings(dir,async config=>({provider:config.provider,model:config.model,answer:'Ready.',usage:{inputTokens:1,outputTokens:1}}));
     expect(result).toEqual({ok:true,provider:'Anthropic',model:'claude-haiku-4-5',answer:'Ready.',usage:{inputTokens:1,outputTokens:1}});
+    // The seller's own Test shows the provider's reason; a paid request never carries it.
+    const refusal=async()=>{throw Object.assign(new Error('AI Gateway requires a valid credit card on file'),{statusCode:403});};
+    const refused=await testInferenceSettings(dir,(config,prompt,_generate,options)=>complete(config,prompt,refusal,options));
+    expect(refused).toEqual({ok:false,provider:'Anthropic',model:'claude-haiku-4-5',error:'INFERENCE_UPSTREAM_403',providerMessage:'AI Gateway requires a valid credit card on file'});
+    const paid=await complete({provider:'gateway',apiKey:'vck_12345678',model:'m',price:'1'},'Hi',refusal).catch(error=>error);
+    expect(paid.code).toBe('INFERENCE_UPSTREAM_403');
+    expect(paid.providerMessage).toBeUndefined();
   });
 });
 

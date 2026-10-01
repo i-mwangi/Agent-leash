@@ -72,9 +72,16 @@ export function clearInferenceSettings(root=ROOT) {
 }
 
 /** One short request with the saved settings, so the seller knows the key works before selling. */
-export async function testInferenceSettings(root=ROOT,run=complete) {
+export async function testInferenceSettings(root=ROOT,run:typeof complete=complete) {
   const config=inferenceConfig(readEnv(root).env);
   if(!config) throw new AppError('INFERENCE_NOT_CONFIGURED',409);
-  const result=await run(config,'Reply with one short sentence confirming you are ready to answer paid requests.');
-  return {ok:true,provider:PROVIDERS[config.provider].label,model:config.model,answer:result.answer.slice(0,300),usage:result.usage};
+  const provider=PROVIDERS[config.provider].label;
+  try {
+    const result=await run(config,'Reply with one short sentence confirming you are ready to answer paid requests.',undefined,{detail:true});
+    return {ok:true as const,provider,model:config.model,answer:result.answer.slice(0,300),usage:result.usage};
+  } catch(error) {
+    // Shown only to the seller in the local dashboard, so the provider's reason is useful here.
+    if(!(error instanceof AppError) || !error.code.startsWith('INFERENCE_UPSTREAM')) throw error;
+    return {ok:false as const,provider,model:config.model,error:error.code,providerMessage:(error as AppError&{providerMessage?:string|null}).providerMessage??null};
+  }
 }

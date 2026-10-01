@@ -63,14 +63,25 @@ export function languageModel(config:InferenceConfig):LanguageModel {
 export const inferenceRequest=z.object({prompt:z.string().trim().min(1).max(MAX_PROMPT_CHARS)}).strict();
 
 type Generate=(options:{model:LanguageModel;prompt:string;maxOutputTokens:number;abortSignal:AbortSignal;maxRetries:number})=>Promise<{text:string;usage?:{inputTokens?:number;outputTokens?:number}}>;
-export async function complete(config:InferenceConfig,prompt:string,generate:Generate=generateText as unknown as Generate) {
+/** A provider failure as an HTTP status and the provider's own one-line message. */
+export function providerFailure(error:unknown) {
+  const e=error as {statusCode?:unknown;message?:unknown};
+  const status=APICallError.isInstance(error)||typeof e?.statusCode==='number'?Number(e.statusCode)||null:null;
+  return {status,message:typeof e?.message==='string'?e.message.split(/\r?\n/)[0].slice(0,300):null};
+}
+
+/**
+ * With `detail`, the provider's message is kept for the seller's own Test in the local dashboard.
+ * Buyers of paid requests only ever see the HTTP status: provider errors can echo request details.
+ */
+export async function complete(config:InferenceConfig,prompt:string,generate:Generate=generateText as unknown as Generate,{detail=false}:{detail?:boolean}={}) {
   let result;
   try {
     result=await generate({model:languageModel(config),prompt,maxOutputTokens:MAX_OUTPUT_TOKENS,abortSignal:AbortSignal.timeout(60_000),maxRetries:1});
   } catch(error) {
-    // Provider errors can echo request details; report only the HTTP status.
-    if(APICallError.isInstance(error) && error.statusCode) throw new AppError(`INFERENCE_UPSTREAM_${error.statusCode}`);
-    throw new AppError('INFERENCE_UPSTREAM_UNAVAILABLE');
+    const failure=providerFailure(error);
+    const code=failure.status?`INFERENCE_UPSTREAM_${failure.status}`:'INFERENCE_UPSTREAM_UNAVAILABLE';
+    throw detail?Object.assign(new AppError(code),{providerMessage:failure.message}):new AppError(code);
   }
   if(!result.text) throw new AppError('INFERENCE_UPSTREAM_INVALID');
   return {provider:config.provider,model:config.model,answer:result.text,usage:{inputTokens:result.usage?.inputTokens??null,outputTokens:result.usage?.outputTokens??null}};
