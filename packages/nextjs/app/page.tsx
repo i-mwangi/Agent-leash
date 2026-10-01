@@ -62,6 +62,7 @@ export default function Home() {
   const [snapshot,setSnapshot]=useState<Snapshot|null>(null);
   const [token,setToken]=useState<SpendToken|null>(null);
   const [liveError,setLiveError]=useState<string|null>(null);
+  const [apiWait,setApiWait]=useState<string|null>(null);
   const [refreshing,setRefreshing]=useState(false);
   const reader=useRef<ReturnType<typeof createLiveReader>|null>(null);
   const liveRevision=useRef(0);
@@ -80,18 +81,26 @@ export default function Home() {
     });
     reader.current=reads;
     (async()=>{
-      try {
-        const response=await fetch('/api/deployment',{signal:AbortSignal.timeout(15_000)});
-        if(!response.ok) throw new Error('API_UNAVAILABLE');
-        const deployment=await response.json();
-        if(!mounted) return;
-        setLive({mode:deployment.mode,deployment:deployment.deployment});
-        if(deployment.mode==='testnet') {
-          void reads.refresh();
-          timer=setInterval(()=>{void reads.refresh();},30_000);
+      // Keep asking while the API is starting or still verifying a deployment, then go live.
+      while(mounted) {
+        try {
+          const response=await fetch('/api/deployment',{signal:AbortSignal.timeout(15_000)});
+          if(!response.ok) throw new Error('API_UNAVAILABLE');
+          const deployment=await response.json();
+          if(!mounted) return;
+          setLive({mode:deployment.mode,deployment:deployment.deployment});
+          if(deployment.mode==='testnet') {
+            setApiWait(null);
+            void reads.refresh();
+            timer=setInterval(()=>{void reads.refresh();},30_000);
+            return;
+          }
+          if(!deployment.deployment?.erc8004AgentId) {setApiWait(null);return;} // No deployment yet: the demo is correct.
+          setApiWait('Verifying your agent on Hedera testnet. Live data appears as soon as the check passes.');
+        } catch {
+          if(mounted) setApiWait('Waiting for the local API to start. Retrying…');
         }
-      } catch {
-        if(mounted) setLiveError('API unavailable. Live deployment could not be read.');
+        await new Promise(resolve=>setTimeout(resolve,5000));
       }
     })();
     return ()=>{mounted=false;if(timer)clearInterval(timer);reads.dispose();};
@@ -242,6 +251,7 @@ export default function Home() {
                 ?'Setup below submits real Hedera testnet transactions, approved in your HashPack wallet. Until it completes, the rest of the dashboard shows sample data.'
                 :'No verified agent in this workspace yet, so figures and controls here are simulated and move no funds. Set up your agent under Create agent.'}
           </div>
+          {apiWait && <div className="notice" role="status"><div>{apiWait}</div></div>}
           {liveError && <p role="alert">{liveError}</p>}
           {tab === "Overview" && (
             <OverviewSummary

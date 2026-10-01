@@ -35,8 +35,9 @@ if (requested === "auto") {
       lastError = code;
     }
   };
-  await attempt();
+  // Serve straight away; verification can take a minute and the dashboard must not see a dead port.
+  void attempt();
   setInterval(() => void attempt(), 15_000).unref();
 }
 serve({ fetch: createApp(() => mode, () => live).fetch, port: 3001, hostname: "127.0.0.1" });
-console.log(`Accountable Agent API: http://127.0.0.1:3001 (${mode}${requested === 'auto' ? ', auto' : ''})`);
+console.log(`Accountable Agent API: http://127.0.0.1:3001 (${mode}${requested === 'auto' ? ', auto: verifying any deployment in the background' : ''})`);
