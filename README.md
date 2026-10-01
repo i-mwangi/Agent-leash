@@ -114,6 +114,67 @@ When setup finishes, the API verifies the deployment (identity, HCS records, pol
 
 ---
 
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph local["Your machine: npm run dev"]
+    UI["Dashboard<br/>Next.js :3000<br/>no keys"]
+    API["Standing API<br/>Hono :3001<br/>attestation key"]
+    RT["Agent runtime<br/>:3002, loopback only<br/>setup + agent keys"]
+    CLI["CLI and MCP server<br/>setup + agent keys"]
+  end
+  HP["HashPack<br/>guardian key"]
+  BUY["Other agents<br/>(x402 buyers)"]
+  FAC["Blocky402<br/>facilitator"]
+  subgraph hedera["Hedera testnet"]
+    ACC["1-of-2 agent account<br/>agent key + guardian key"]
+    HCS["HCS profile topic"]
+    POL["PolicyRegistry"]
+    VAULT["GuardedHbarVault<br/>(optional)"]
+    REG["ERC-8004 identity +<br/>reputation registries"]
+    HTS["HTS USDC, SAUCE"]
+    DEX["SaucerSwap V1"]
+    MIR["Mirror node"]
+  end
+
+  UI -- "/api proxy" --> API
+  UI -- "/setup proxy" --> RT
+  UI -- "WalletConnect" --> HP
+  HP -- "fund setup account, create topic,<br/>allow asset, approve agreement, pause" --> hedera
+  RT -- "agent account, UAID, policy deploy,<br/>token association, registration" --> hedera
+  CLI -- "policy-checked spends, vault,<br/>reviews of other agents" --> hedera
+  API -- "identity, policy, settlement reads" --> MIR
+  BUY -- "GET /standing (x402)" --> API
+  API -- "verify and settle" --> FAC
+  FAC -- "USDC transfer" --> HTS
+```
+
+- **Keys stay where they are used.** The dashboard holds none. The API holds only the attestation key that signs standing reports and refuses to start with a spend key in its environment. The agent runtime and CLI hold the setup and agent keys. The guardian key stays in HashPack (or `.env.guardian` for CLI setup).
+- **Hedera is the source of truth.** Every check (identity, key state, pause, caps, agreement, payment settlement) is read from the mirror node at the moment it is needed, never from local state alone.
+- **The agent's client enforces the policy** before every signature; only the optional vault enforces rules on-chain.
+
+A paid standing check, end to end:
+
+```mermaid
+sequenceDiagram
+  participant B as Buyer agent
+  participant A as Standing API
+  participant F as Blocky402
+  participant H as Hedera (mirror)
+  B->>A: GET /standing/0.0.agent
+  A->>H: verify identity, key, policy, agreement
+  A-->>B: 402 Payment Required: 0.001 USDC to the agent account
+  B->>A: same request + PAYMENT-SIGNATURE
+  A->>F: verify and settle the payment
+  F->>H: USDC transfer reaches consensus
+  A->>H: confirm the exact transfer, re-read current state
+  A-->>B: EIP-712 signed report, valid for 2 minutes
+  B->>H: check the signed fields against Hashscan
+```
+
+---
+
 ## What is enforced, and what is not
 
 | Need                                        | What the template provides                                                                                                                                                                                                                                                        | Enforced by                                                      |
